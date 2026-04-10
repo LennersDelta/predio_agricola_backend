@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Request;
 class LogService
 {
     // ── IDs de módulos (tabla modulos) ────────────────────────────────────────
-    const MODULO_BIENES    = 1;
+    const MODULO_PREDIO    = 1;
     const MODULO_USUARIOS  = 2;
     const MODULO_REPORTES  = 3;
     const MODULO_DOCUMENTOS = 4;
@@ -31,7 +31,7 @@ class LogService
      * campos → campos a capturar (null = todos)
      */
     private static array $config = [
-        self::MODULO_BIENES => [
+        self::MODULO_PREDIO => [
             'tabla'  => 'propiedades',
             'campos' => null, // captura todos los campos
         ],
@@ -85,9 +85,9 @@ class LogService
      * Luego llamar a registrarEdicion() DESPUÉS del UPDATE.
      *
      * Ejemplo de uso en controlador:
-     *   $oldData = LogService::capturarAntes(LogService::MODULO_BIENES, $id);
+     *   $oldData = LogService::capturarAntes(LogService::MODULO_PREDIO, $id);
      *   // ... hacer el UPDATE ...
-     *   LogService::registrarEdicion(LogService::MODULO_BIENES, $id, $oldData);
+     *   LogService::registrarEdicion(LogService::MODULO_PREDIO, $id, $oldData);
      */
     public static function capturarAntes(int $moduloId, int $idRegistro): ?array
     {

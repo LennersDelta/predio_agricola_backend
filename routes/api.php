@@ -4,7 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Resources\UserResource;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\BienesRaicesController;
+use App\Http\Controllers\PredioAgricolaRaicesController;
 use App\Http\Controllers\ComunaController;
 use App\Http\Controllers\ConservadorController;
 use App\Http\Controllers\EstadoPropiedadController;
@@ -36,20 +36,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('administrador',          fn() => response()->json(DB::table('administrador')->orderBy('descripcion')->get()));
     Route::get('uso',                    fn() => response()->json(DB::table('uso')->orderBy('descripcion')->get()));
 
-    // Bienes Raíces
-    Route::get('bienes',              [BienesRaicesController::class, 'index']);
-    Route::get('bienes-borradores',   [BienesRaicesController::class, 'indexBorradores']);
-    Route::get('bienes-select',       [BienesRaicesController::class, 'listadoSelect']);
-    Route::post('bienes/grabar',        [BienesRaicesController::class,   'grabar']);
-    Route::get('bienes/uuid/{uuid}', [BienesRaicesController::class, 'showByUuid']);
-    Route::get('bienes/{id}',        [BienesRaicesController::class, 'show']);
-    Route::put('bienes/{id}',    [BienesRaicesController::class, 'update']);
-    Route::delete('bienes/{id}',       [BienesRaicesController::class, 'destroy']);
-    Route::post('bienes/{id}/update',    [BienesRaicesController::class, 'update']);
-    Route::post('bienes/{id}/completar', [BienesRaicesController::class, 'completar']);
-    Route::get('documentos/{uuid}/ver',       [BienesRaicesController::class, 'verDocumento']);
-    Route::get('documentos/{uuid}/descargar', [BienesRaicesController::class, 'descargarDocumento']);
-    Route::delete('documentos/{uuid}',          [BienesRaicesController::class, 'destroyDocumento']);
+
+    // PREDIO //
+
+    Route::get('predio/insumosproductos', [InsumosServiciosController::class, 'index']);
+    Route::get('predio/parquevehicular', [ParqueVehicularController::class, 'index']); 
+    Route::get('predio/recursoshumano', [RecursosHumanoController::class, 'index']);
 
     // Reportes
     // Route::get('reportes/regiones', [ReportesController::class, 'regiones']);
