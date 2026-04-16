@@ -4,19 +4,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Resources\UserResource;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\PredioAgricolaRaicesController;
-use App\Http\Controllers\ComunaController;
-use App\Http\Controllers\ConservadorController;
-use App\Http\Controllers\EstadoPropiedadController;
-use App\Http\Controllers\ProvinciaController;
-use App\Http\Controllers\RegionController;
-use App\Http\Controllers\TipoDocumentoController;
-use App\Http\Controllers\TipoPropiedadController;
+
 use App\Http\Controllers\UsuarioController;
-use App\Http\Controllers\SubPropiedadController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReporteRegionController;
 
+use App\Http\Controllers\EstadosController;
+use App\Http\Controllers\InsumosServiciosController;
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -26,22 +20,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
 
     // Selectores
-    Route::get('tipo-propiedad',         [TipoPropiedadController::class,  'index']);
-    Route::get('estado-propiedad',       [EstadoPropiedadController::class,'index']);
-    Route::get('regiones',               [RegionController::class,         'index']);
-    Route::get('provincias/{region_id}', [ProvinciaController::class,      'index']);
-    Route::get('comunas/{provincia_id}', [ComunaController::class,         'index']);
+
     Route::get('tipo-documento',         [TipoDocumentoController::class,  'index']);
-    Route::get('conservador',            [ConservadorController::class,    'index']);
     Route::get('administrador',          fn() => response()->json(DB::table('administrador')->orderBy('descripcion')->get()));
     Route::get('uso',                    fn() => response()->json(DB::table('uso')->orderBy('descripcion')->get()));
 
 
     // PREDIO //
 
-    Route::get('predio/insumosproductos', [InsumosServiciosController::class, 'index']);
-    Route::get('predio/parquevehicular', [ParqueVehicularController::class, 'index']); 
-    Route::get('predio/recursoshumano', [RecursosHumanoController::class, 'index']);
+    Route::get('listaInsumosProductos', [InsumosServiciosController::class, 'getListaInsumosProductos']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
+    Route::delete('deleteInsumosProductos/{numeroOrden}', [InsumosServiciosController::class, 'eliminarInsumosProductos']);// ELIMINO DE LA LISTA EL INSUMO Y PRODUCTOS PASANDO EL CODIGO ORDEN 
+
+
+    /*Route::get('predio/parquevehicular', [ParqueVehicularController::class, 'index']); 
+    Route::get('predio/recursoshumano', [RecursosHumanoController::class, 'index']);*/
+
+ 
+   // COMBOX  SELECTOR //
+    Route::get('estados/{tipo}', [EstadosController::class, 'getEstados']); // TIPO COMPRA - ESTADO O.C - ESTADO FACTURA
+    Route::get('listaPredio', [EstadosController::class, 'getListaPredio']); // LISTA TODOS LOS PREDIOS QUE ESTA EN ESTADO ACTIVO.
+
 
     // Reportes
     // Route::get('reportes/regiones', [ReportesController::class, 'regiones']);
@@ -49,9 +47,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
 });
 
+
+
+   
+
 // ── Solo administrador ────────────────────────────────────
 Route::middleware(['auth:sanctum', 'role:administrador'])->group(function () {
 
     Route::apiResource('usuarios', UsuarioController::class);
+   
 
 });
