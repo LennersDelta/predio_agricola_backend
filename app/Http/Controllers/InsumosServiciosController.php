@@ -81,4 +81,94 @@ class InsumosServiciosController extends Controller
         }
     }
 
+
+    public function insertar(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'predio'                => ['required', 'integer'],
+            'producto_servicio'     => ['required', 'string', 'max:255'],
+
+            'empresa_cotizacion'    => ['required', 'string', 'max:255'],
+            'fecha_cotizacion'      => ['required', 'date'],
+            'valor_cotizacion'      => ['required', 'numeric', 'min:0'],
+
+            'tipo_compra'           => ['required', 'integer'],
+            'etapa_compra'          => ['required', 'string', 'max:100'],
+
+            'numero_orden_compra'   => ['required', 'string', 'max:100'],
+            'estado_orden_compra'   => ['required', 'integer'],
+            'fecha_orden_compra'    => ['required', 'date'],
+            'valor_total_orden'     => ['required', 'numeric', 'min:0'],
+
+            'numero_factura'        => ['required', 'string', 'max:100'],
+            'fecha_factura'         => ['required', 'date'],
+            'proveedor'             => ['required', 'string', 'max:255'],
+            'estado_factura'        => ['required', 'integer'],
+
+            'observaciones'         => ['nullable', 'string'],
+        ], [
+            'predio.required' => 'El predio es obligatorio.',
+            'producto_servicio.required' => 'Debe indicar producto o servicio.',
+            'empresa_cotizacion.required' => 'La empresa es obligatoria.',
+            'fecha_cotizacion.required' => 'La fecha de cotización es obligatoria.',
+            'valor_cotizacion.required' => 'El valor de cotización es obligatorio.',
+            'tipo_compra.required' => 'Debe seleccionar tipo de compra.',
+            'etapa_compra.required' => 'Debe indicar la etapa de compra.',
+            'numero_orden_compra.required' => 'El número de orden de compra es obligatorio.',
+            'estado_orden_compra.required' => 'Debe seleccionar estado de la orden.',
+            'fecha_orden_compra.required' => 'La fecha de orden de compra es obligatoria.',
+            'valor_total_orden.required' => 'El valor total de la orden es obligatorio.',
+            'numero_factura.required' => 'El número de factura es obligatorio.',
+            'fecha_factura.required' => 'La fecha de factura es obligatoria.',
+            'proveedor.required' => 'El proveedor es obligatorio.',
+            'estado_factura.required' => 'Debe seleccionar estado de la factura.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            $id = DB::table('insumosproductos')->insertGetId([
+                'predio'            => (int) $request->predio,
+                'producto_servicio' => $request->producto_servicio,
+                'empresa'           => $request->empresa_cotizacion,
+                'fecha_cotizacion'  => $request->fecha_cotizacion,
+                'valor_cotizacion'  => $request->valor_cotizacion,
+                'tipo_compra'       => (int) $request->tipo_compra,
+                'etapa'             => $request->etapa_compra,
+                'numero_orden'      => $request->numero_orden_compra,
+                'estado_orden'      => (int) $request->estado_orden_compra,
+                'fecha_orden'       => $request->fecha_orden_compra,
+                'valor_total'       => $request->valor_total_orden,
+                'numero_factura'    => $request->numero_factura,
+                'fecha_factura'     => $request->fecha_factura,
+                'proveedor'         => $request->proveedor,
+                'estado_factura'    => (int) $request->estado_factura,
+                'observaciones'     => $request->observaciones ?? null,
+            ], 'orden'); 
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Registro guardado correctamente',
+                'id'      => $id
+            ], 201);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al guardar',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
 }
