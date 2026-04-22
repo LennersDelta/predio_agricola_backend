@@ -11,6 +11,8 @@ use App\Http\Controllers\ReporteRegionController;
 
 use App\Http\Controllers\EstadosController;
 use App\Http\Controllers\InsumosServiciosController;
+use App\Http\Controllers\ParqueVehicularController;
+
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -35,15 +37,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('insumosproducto/update/{orden}', [InsumosServiciosController::class, 'update']); //UPDATE DE INSUMOS Y PRODUCTOS
     
 
+    // PARQUE VEHICULAR //
+    Route::get('listaParqueVehicular', [ParqueVehicularController::class, 'getListaParqueVehicular']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
+    Route::post('parquevehicular/insert', [ParqueVehicularController::class, 'insertar']); //INSERT DE INSUMOS Y PRODUCTOS
 
-
-    /*Route::get('predio/parquevehicular', [ParqueVehicularController::class, 'index']); 
-    Route::get('predio/recursoshumano', [RecursosHumanoController::class, 'index']);*/
 
  
    // COMBOX  SELECTOR //
     Route::get('estados/{tipo}', [EstadosController::class, 'getEstados']); // TIPO COMPRA - ESTADO O.C - ESTADO FACTURA
     Route::get('listaPredio', [EstadosController::class, 'getListaPredio']); // LISTA TODOS LOS PREDIOS QUE ESTA EN ESTADO ACTIVO.
+    Route::get('listaTipoVehiculos', [EstadosController::class, 'getListaTipoVehiculos']); // LISTO TODOS LOS VEHICULOS ACTIVO
 
 
     // Reportes
