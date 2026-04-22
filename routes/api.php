@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('insumosproducto/insert', [InsumosServiciosController::class, 'insertar']); //INSERT DE INSUMOS Y PRODUCTOS
     Route::get('insumosproducto/{orden}', [InsumosServiciosController::class, 'show']);
     Route::put('insumosproducto/update/{orden}', [InsumosServiciosController::class, 'update']); //UPDATE DE INSUMOS Y PRODUCTOS
+    
     // FACTURA LUZ
     Route::get('/factura/luz',         [FacturaLuzController::class, 'index']);
     Route::post('/factura/luz',        [FacturaLuzController::class, 'insert']);
@@ -37,6 +38,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/factura/agua',        [FacturaAguaController::class, 'insert']);
     Route::delete('/factura/agua/{id}', [FacturaAguaController::class, 'destroy']);
 
+    // PARQUE VEHICULAR //
+    Route::get('listaParqueVehicular', [ParqueVehicularController::class, 'getListaParqueVehicular']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
+    Route::post('parquevehicular/insert', [ParqueVehicularController::class, 'insertar']); //INSERT DE INSUMOS Y PRODUCTOS
 
 
 

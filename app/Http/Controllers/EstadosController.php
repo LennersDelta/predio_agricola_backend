@@ -40,4 +40,20 @@ class EstadosController extends Controller
         }
     }
 
+    public function getListaTipoVehiculos()
+    {
+        try{
+            return response()->json(
+                DB::table('tipo_vehiculo')
+                ->where('activo', true)
+                ->orderBy('nombre')
+                ->get(['id', 'nombre'])
+            );
+        }catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
