@@ -24,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn(Request $r) => new UserResource($r->user()));
     Route::get('dashboard',         [DashboardController::class,      'index']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);
+    Route::post('/login',  [AuthenticatedSessionController::class, 'index']);
     //Route::get('tipo-documento',         [TipoDocumentoController::class,  'index']);
 
     // PREDIO //
@@ -65,7 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // DOCUMENTOS - PREDIO //
     Route::delete('/documentos/{uuid}', [PredioController::class, 'eliminarDocumento']);
-
+    Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
+    Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
 
     // Reportes
     // Route::get('reportes/regiones', [ReportesController::class, 'regiones']);

@@ -59,4 +59,94 @@ class PredioController extends Controller
         }
         return response()->json(['message' => 'Documento eliminado correctamente']);
     }
+
+    public function verDocumento($uuid, Request $request)
+    {
+        $tipo = $request->query('tipo');
+
+        $vehiculo = DB::table('parque_vehicular')
+            ->where('uuid', $uuid)
+            ->first();
+
+        if (!$vehiculo) {
+            abort(404,'Vehículo no encontrado');
+        }
+
+        $path = null;
+
+        if ($tipo == '1') {
+            $path = $vehiculo->permiso_circulacion_img;
+        }
+
+        if ($tipo == '2') {
+            $path = $vehiculo->seguro_obligatorio_img;
+        }
+
+        if (!$path) {
+            abort(404,'Documento no existe');
+        }
+
+        if (!Storage::disk('public')->exists($path)) {
+            abort(404,'Archivo no encontrado');
+        }
+
+        $fullPath = Storage::disk('public')->path($path);
+
+        $mime = Storage::disk('public')->mimeType($path);
+
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        // Word descarga
+        if (in_array($extension, ['doc','docx'])) {
+            return response()->download(
+                $fullPath,
+                basename($path),
+                ['Content-Type' => $mime]
+            );
+        }
+
+        // PDF / imágenes inline
+        return response()->file($fullPath, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline'
+        ]);
+    }
+
+    public function descargarDocumento($uuid, Request $request)
+    {
+        $tipo = $request->query('tipo');
+
+        $vehiculo = DB::table('parque_vehicular')
+            ->where('uuid', $uuid)
+            ->first();
+
+        if (!$vehiculo) {
+            abort(404, 'Vehículo no encontrado');
+        }
+
+        $path = null;
+
+        if ($tipo == '1') {
+            $path = $vehiculo->permiso_circulacion_img;
+        }
+
+        if ($tipo == '2') {
+            $path = $vehiculo->seguro_obligatorio_img;
+        }
+
+        if (!$path) {
+            abort(404, 'Documento no existe');
+        }
+
+        if (!Storage::disk('public')->exists($path)) {
+            abort(404, 'Archivo no encontrado');
+        }
+
+        $fullPath = Storage::disk('public')->path($path);
+
+        return response()->download(
+            $fullPath,
+            basename($path)
+        );
+    }
 }
