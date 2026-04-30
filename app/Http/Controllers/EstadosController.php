@@ -56,4 +56,19 @@ class EstadosController extends Controller
         }
     }
 
+    public function getListaTipoGrado()
+    {
+        try{
+            return response()->json(
+                DB::table('grados')                
+                ->orderBy('id')
+                ->get(['id', 'descripcion'])
+            );
+        }catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
