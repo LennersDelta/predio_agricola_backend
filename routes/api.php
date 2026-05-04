@@ -56,7 +56,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('listaRecursosHumanos', [RecursosHumanoController::class, 'getListaRecursosHumanos']); // LISTO TODOS EL PERSONAL QUE ESTA REGISTRADO COMO TRABAJADOR
     Route::post('recursoshumanos/insert', [RecursosHumanoController::class, 'insertar']); //INSERT DE RECURSOS HUMANOS
     Route::delete('deleteRecursosHumanos/{numeroOrden}', [RecursosHumanoController::class, 'eliminarRecursosHumanos']); 
+    Route::get('/recursoshumanos/{uuid}', [RecursosHumanoController::class,'show']);
 
+
+
+
+
+
+
+
+    
     // COMBOX  SELECTOR //
     Route::get('estados/{tipo}', [EstadosController::class, 'getEstados']); // TIPO COMPRA - ESTADO O.C - ESTADO FACTURA
     Route::get('listaPredio', [EstadosController::class, 'getListaPredio']); // LISTA TODOS LOS PREDIOS QUE ESTA EN ESTADO ACTIVO.

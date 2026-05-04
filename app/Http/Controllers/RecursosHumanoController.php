@@ -32,11 +32,11 @@ class RecursosHumanoController extends Controller
                 'rh.fecha_inicio_contrato',
                 'rh.anios_servicio',
                 'rh.ultima_calificacion',
-                'rh.capacitado_prevencion_riesgo'
+                'rh.capacitado_prevencion_riesgo',
+                'rh.uuid'
             )
 
             ->orderBy('rh.orden', 'desc');
-
         return response()->json($query->get());
     }
 
@@ -101,7 +101,6 @@ class RecursosHumanoController extends Controller
         }
     }
 
-
     public function eliminarRecursosHumanos($numeroOrden)
     {
         try {
@@ -129,4 +128,72 @@ class RecursosHumanoController extends Controller
             ], 500);
         }
     }
+
+    public function show($uuid)
+    {
+        try {
+
+            /*if (!$uuid || $uuid === 'undefined') {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'UUID inválido'
+                ], 400);
+            }*/
+
+            $registro = DB::table('recursos_humanos as rh')
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->leftJoin('grados as g', 'rh.grado_id', '=', 'g.id')
+                ->leftJoin('tipo_contrato as tc', 'rh.tipo_contrato_id', '=', 'tc.id')
+                ->select(
+                    'rh.uuid',
+                    'rh.orden',
+
+                    'rh.predio_id',
+                    'p.nombre as predio_nombre',
+
+                    'rh.grado_id',
+                    'g.descripcion as grado_nombre',
+
+                    'rh.tipo_contrato_id',
+                    'tc.nombre as tipo_contrato_nombre',
+
+                    'rh.nombres_apellidos',
+                    'rh.rut',
+
+                    'rh.cargo_contratado',
+                    'rh.area_funciones',
+                    'rh.funcion_actual',
+
+                    'rh.fecha_inicio_contrato',
+                    'rh.anios_servicio',
+
+                    'rh.ultima_calificacion',
+                    'rh.capacitado_prevencion_riesgo'
+                )
+                ->where('rh.uuid', $uuid)
+                ->first();
+
+            if (!$registro) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Registro no encontrado'
+                ], 404);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'data' => $registro
+            ]);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error al obtener registro',
+                'error' => $e->getMessage()
+            ], 500);
+
+        }
+    }
+
 }
