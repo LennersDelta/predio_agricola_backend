@@ -71,4 +71,19 @@ class EstadosController extends Controller
         }
     }
 
+    public function getListaTipoContrato()
+    {
+        try{
+            return response()->json(
+                DB::table('tipo_contrato')                
+                ->orderBy('id')
+                ->get(['id', 'nombre'])
+            );
+        }catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
