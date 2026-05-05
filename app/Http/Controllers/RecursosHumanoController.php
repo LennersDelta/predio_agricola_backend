@@ -196,4 +196,100 @@ class RecursosHumanoController extends Controller
         }
     }
 
+    /* UPDATE */
+    public function update(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'predio_id' => ['required', 'integer'],
+
+            'grado_id' => ['required', 'integer'],
+            'nombres_apellidos' => ['required', 'string', 'max:150'],
+            'rut' => ['required', 'string', 'max:12'],
+
+            'cargo_contratado' => ['required', 'string', 'max:150'],
+            'area_funciones' => ['required', 'string', 'max:150'],
+            'funcion_actual' => ['required', 'string', 'max:150'],
+
+            'fecha_inicio_contrato' => ['nullable', 'date'],
+            'anios_servicio' => ['nullable', 'integer'],
+
+            'ultima_calificacion' => ['nullable', 'string', 'max:100'],
+            'capacitado_prevencion_riesgo' => ['nullable', 'boolean'],
+
+            'tipo_contrato_id' => ['required', 'integer'],
+
+            'uuid' => ['nullable', 'string']
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first()
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            $query = DB::table('recursos_humanos');
+
+            if (is_numeric($id)) {
+                $query->where('orden', $id);
+            } else {
+                $query->where('uuid', $id);
+            }
+
+            $existe = $query->first();
+
+            if (!$existe) {
+                return response()->json([
+                    'message' => 'Registro no encontrado'
+                ], 404);
+            }
+
+            $updateQuery = DB::table('recursos_humanos');
+
+            if (is_numeric($id)) {
+                $updateQuery->where('orden', $id);
+            } else {
+                $updateQuery->where('uuid', $id);
+            }
+
+            $updateQuery->update([
+                'predio_id' => (int) $request->predio_id,
+
+                'grado_id' => (int) $request->grado_id,
+                'nombres_apellidos' => $request->nombres_apellidos,
+                'rut' => $request->rut,
+
+                'cargo_contratado' => $request->cargo_contratado,
+                'area_funciones' => $request->area_funciones,
+                'funcion_actual' => $request->funcion_actual,
+
+                'fecha_inicio_contrato' => $request->fecha_inicio_contrato,
+                'anios_servicio' => $request->anios_servicio,
+
+                'ultima_calificacion' => $request->ultima_calificacion,
+                'capacitado_prevencion_riesgo' => (bool) $request->capacitado_prevencion_riesgo,
+
+                'tipo_contrato_id' => (int) $request->tipo_contrato_id,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Registro de recursos humanos actualizado correctamente'
+            ]);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al actualizar',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
 }
