@@ -17,6 +17,7 @@ use App\Http\Controllers\ParqueVehicularController;
 use App\Http\Controllers\TipoDocumentoController;
 use App\Http\Controllers\PredioController;
 use App\Http\Controllers\RecursosHumanoController;
+use App\Http\Controllers\ContratosEfectuadosController;
 
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -59,7 +60,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/recursoshumanos/{uuid}', [RecursosHumanoController::class, 'update']);
 
 
-
+    // CONTRATOS EFECTUADOS //
+    Route::get('listaContratosEfectuados', [ContratosEfectuadosController::class, 'getListaContratos']);
 
 
 
