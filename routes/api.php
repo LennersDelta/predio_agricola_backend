@@ -61,9 +61,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     // CONTRATOS EFECTUADOS //
-    Route::get('listaContratosEfectuados', [ContratosEfectuadosController::class, 'getListaContratos']);
-
-
+    Route::get('listaContratosEfectuados', [ContratosEfectuadosController::class, 'getListaContratos']);// LISTO TODOS LOS CONTRATOS
+    Route::post('contratos/insert', [ContratosEfectuadosController::class, 'insertar']); //INSERT CONTRATOS
+    Route::delete('deleteContratos/{numeroOrden}', [ContratosEfectuadosController::class, 'eliminarContratos']); 
+    Route::get('/contratos/{uuid}', [ContratosEfectuadosController::class,'show']);
 
 
 

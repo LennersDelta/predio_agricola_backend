@@ -132,14 +132,6 @@ class RecursosHumanoController extends Controller
     public function show($uuid)
     {
         try {
-
-            /*if (!$uuid || $uuid === 'undefined') {
-                return response()->json([
-                    'ok' => false,
-                    'message' => 'UUID inválido'
-                ], 400);
-            }*/
-
             $registro = DB::table('recursos_humanos as rh')
                 ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
                 ->leftJoin('grados as g', 'rh.grado_id', '=', 'g.id')
