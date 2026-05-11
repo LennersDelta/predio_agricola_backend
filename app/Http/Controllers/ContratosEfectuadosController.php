@@ -157,5 +157,84 @@ class ContratosEfectuadosController extends Controller
         }
     }
 
+/* UPDATE */
+    public function update(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
 
+            'predio_id' => ['required', 'integer'],
+            'contrato' => ['required', 'string', 'max:150'],
+            'fecha' => ['required', 'date'],
+            'empresa_persona' => ['required', 'string', 'max:150'],
+            'rut' => ['required', 'string', 'max:12'],
+            'valor_renta' => ['required', 'numeric'],
+            'renta_id' => ['required', 'integer'],
+            'fecha_vencimiento' => ['required', 'date'],
+            'vigencia_contrato' => ['required', 'string', 'max:100'],
+            'doe_respuesta_b5' => ['required', 'string', 'max:255'],
+            'observaciones' => ['nullable', 'string'],
+            'uuid' => ['nullable', 'string']
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first()
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            $query = DB::table('contratos');
+
+            if (is_numeric($id)) {
+                $query->where('orden', $id);
+            } else {
+                $query->where('uuid', $id);
+            }
+
+            $existe = $query->first();
+
+            if (!$existe) {
+                return response()->json([
+                    'message' => 'Registro no encontrado'
+                ], 404);
+            }
+
+            $updateQuery = DB::table('contratos');
+
+            if (is_numeric($id)) {
+                $updateQuery->where('orden', $id);
+            } else {
+                $updateQuery->where('uuid', $id);
+            }
+
+            $updateQuery->update([
+
+                'predio_id' => (int) $request->predio_id,
+                'contrato' => $request->contrato,
+                'fecha' => $request->fecha,
+                'empresa_persona' => $request->empresa_persona,
+                'rut' => $request->rut,
+                'valor_renta' => $request->valor_renta,
+                'renta_id' => (int) $request->renta_id,
+                'fecha_vencimiento' => $request->fecha_vencimiento,
+                'vigencia_contrato' => $request->vigencia_contrato,
+                'doe_respuesta_b5' => $request->doe_respuesta_b5,
+                'observaciones' => $request->observaciones,
+            ]);
+            DB::commit();
+            return response()->json([
+                'message' => 'Contrato actualizado correctamente'
+            ]);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
