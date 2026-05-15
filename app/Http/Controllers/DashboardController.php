@@ -2,88 +2,232 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(): JsonResponse
     {
-        $ahora      = now();
-        $inicioMes  = $ahora->copy()->startOfMonth();
-        $hace12Meses = $ahora->copy()->subMonths(11)->startOfMonth();
+        try {
 
-        // ── Total propiedades ─────────────────────────────────────────────────
-        $total = DB::table('propiedades')->where('estado_propiedad_id', '!=', 2)->count();
+            $totalPredio = DB::table('predio')
+                ->count();
 
-        // ── Ingresadas este mes ───────────────────────────────────────────────
-        $ingresadasMes = DB::table('propiedades')
-            ->where('estado_propiedad_id', '!=', 2)
-            ->where('created_at', '>=', $inicioMes)
-            ->count();
+            // Total vehículos
+            $totalVehiculos = DB::table('parque_vehicular')
+                ->count();
 
-        // ── Por estado ───────────────────────────────────────────────────────
-        $porEstado = DB::table('propiedades as p')
-            ->where('p.estado_propiedad_id', '!=', 2)
-            ->leftJoin('estado_propiedad as ep', 'p.estado_propiedad_id', '=', 'ep.id')
-            ->select('ep.descripcion', DB::raw('COUNT(*) as total'))
-            ->groupBy('ep.descripcion')
-            ->get()
-            ->mapWithKeys(fn($r) => [$r->descripcion ?? 'Sin estado' => (int) $r->total]);
+            // Vehículos por predio
+            $porPredio = DB::table('parque_vehicular as pv')
+                ->join('predio as p', 'p.id', '=', 'pv.predio')
+                ->select(
+                    'p.id',
+                    'p.nombre',
+                    DB::raw('COUNT(pv.orden) as total')
+                )
+                ->groupBy('p.id', 'p.nombre')
+                ->orderByDesc('total')
+                ->get();
 
-        // ── Usuarios activos (con sesión en los últimos 30 días) ──────────────
-        $usuariosActivos = DB::table('users')
-            ->where('updated_at', '>=', $ahora->copy()->subDays(30))
-            ->count();
+            // Vehículos por tipo
+            $porTipo = DB::table('parque_vehicular as pv')
+                ->join('tipo_vehiculo as tv', 'tv.id', '=', 'pv.tipo_vehicular_id')
+                ->select(
+                    'tv.id',
+                    'tv.nombre',
+                    DB::raw('COUNT(pv.orden) as total')
+                )
+                ->groupBy('tv.id', 'tv.nombre')
+                ->orderByDesc('total')
+                ->get();
 
-        // ── Tendencia últimos 12 meses ────────────────────────────────────────
-        $tendencia = DB::table('propiedades')
-            ->where('estado_propiedad_id', '!=', 2)
-            ->select(
-                DB::raw("TO_CHAR(created_at, 'YYYY-MM') as mes"),
-                DB::raw('COUNT(*) as total')
-            )
-            ->where('created_at', '>=', $hace12Meses)
-            ->groupBy('mes')
-            ->orderBy('mes')
-            ->get()
-            ->mapWithKeys(fn($r) => [$r->mes => (int) $r->total]);
+            // Últimos vehículos registrados (opcional)
+            $ultimosVehiculos = DB::table('parque_vehicular as pv')
+                ->join('predio as p', 'p.id', '=', 'pv.predio')
+                ->join('tipo_vehiculo as tv', 'tv.id', '=', 'pv.tipo_vehicular_id')
+                ->select(
+                    'pv.orden',
+                    'pv.ppu',
+                    'pv.marca',
+                    'pv.modelo',
+                    'pv.anio',
+                    'p.nombre as predio',
+                    'tv.nombre as tipo',
+                    'pv.created_at'
+                )
+                ->orderByDesc('pv.created_at')
+                ->limit(5)
+                ->get();
 
-        // Rellenar los 12 meses (incluso los vacíos con 0)
-        $tendenciaCompleta = [];
-        for ($i = 11; $i >= 0; $i--) {
-            $key = $ahora->copy()->subMonths($i)->format('Y-m');
-            $tendenciaCompleta[] = $tendencia[$key] ?? 0;
-        }
 
-        // ── Por región ────────────────────────────────────────────────────────
-        $porRegion = DB::table('propiedades as p')
-            ->where('p.estado_propiedad_id', '!=', 2)
-            ->leftJoin('regiones as r', 'p.region_id', '=', 'r.id')
-            ->select(
-                'r.descripcion as nombre',
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN p.created_at >= '{$inicioMes}' THEN 1 ELSE 0 END) as nuevas")
-            )
-            ->whereNotNull('r.id')
-            ->groupBy('r.id', 'r.descripcion')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn($r) => [
-                'nombre' => $r->nombre,
-                'total'  => (int) $r->total,
-                'nuevas' => (int) $r->nuevas,
+                // RRHH //
+
+            $totalFuncionarios = DB::table('recursos_humanos')
+                ->count();
+
+            $funcionariosPorPredio = DB::table('recursos_humanos as rh')
+                ->join('predio as p', 'p.id', '=', 'rh.predio_id')
+                ->select(
+                    'p.id',
+                    'p.nombre',
+                    DB::raw('COUNT(rh.orden) as total')
+                )
+                ->groupBy('p.id', 'p.nombre')
+                ->orderByDesc('total')
+                ->get();
+
+            $insumosproductos = DB::table('insumosproductos as ip')
+                ->join('predio as p', 'p.id', '=', 'ip.predio')
+                ->select(
+                    'ip.predio',
+                    'p.nombre',
+
+                    DB::raw("
+                        COALESCE(
+                            CAST(SUM(ip.valor_total) AS BIGINT),
+                        0) as total_por_predio
+                    "),
+
+                    DB::raw("
+                        COALESCE(
+                            CAST(SUM(ip.valor_cotizacion) AS BIGINT),
+                        0) as total_cotizacion_por_predio
+                    ")
+                )
+                ->groupBy('ip.predio', 'p.nombre')
+                ->orderBy('p.nombre')
+                ->get();
+
+            return response()->json([
+                'totalVehiculos' => $totalVehiculos,
+                'porPredio'      => $porPredio,
+                'porTipo'        => $porTipo,
+                'ultimosVehiculos' => $ultimosVehiculos,
+                'totalPredio' => $totalPredio,
+
+                // RRHH
+                'totalFuncionarios' => $totalFuncionarios,
+                'funcionariosPorPredio' => $funcionariosPorPredio,
+
+                // INSUMOS Y PRODUCTOS
+               'insumosproductos' => $insumosproductos,
+               
             ]);
 
-        return response()->json([
-            'totalViviendas'   => $total,
-            'viviendasMes'     => $ingresadasMes,
-            'usuariosActivos'  => $usuariosActivos,
-            'variacionMes'     => $total > 0
-                ? round(($ingresadasMes / $total) * 100, 1)
-                : 0,
-            'porEstado'        => $porEstado,
-            'tendencia'        => $tendenciaCompleta,
-            'porRegion'        => $porRegion,
-        ]);
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar dashboard',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
     }
+
+    public function vehiculosPorPredio($id)
+    {
+        $vehiculos = DB::table('parque_vehicular as pv')
+            ->join('tipo_vehiculo as tv', 'tv.id', '=', 'pv.tipo_vehicular_id')
+            ->select(
+                'pv.orden',
+                'pv.ppu',
+                'pv.marca',
+                'pv.modelo',
+                'pv.anio',
+                'tv.nombre as tipo',
+                'pv.fecha_adquisicion',
+                'pv.vencimiento_permiso_circulacion',
+                'pv.vencimiento_seguro_obligatorio'
+            )
+            ->where('pv.predio', $id)
+            ->orderBy('pv.marca')
+            ->get();
+
+        return response()->json($vehiculos);
+    }
+
+    public function recursosHumanosPorPredio($id)
+    {
+        try {
+
+            $personal = DB::table('recursos_humanos as rh')
+
+                ->leftJoin(
+                    'grados as g',
+                    'g.id',
+                    '=',
+                    'rh.grado_id'
+                )
+
+                ->leftJoin(
+                    'tipo_contrato as tc',
+                    'tc.id',
+                    '=',
+                    'rh.tipo_contrato_id'
+                )
+
+                ->leftJoin(
+                    'predio as p',
+                    'p.id',
+                    '=',
+                    'rh.predio_id'
+                )
+
+                ->select(
+                    'rh.orden',
+                    'rh.nombres_apellidos',
+                    'rh.rut',
+                    'rh.cargo_contratado',
+                    'rh.area_funciones',
+                    'rh.funcion_actual',
+                    'rh.fecha_inicio_contrato',
+                    'rh.anios_servicio',
+                    'rh.ultima_calificacion',
+                    'rh.capacitado_prevencion_riesgo',
+
+                    DB::raw("COALESCE(g.descripcion, '-') as grado"),
+                    DB::raw("COALESCE(tc.nombre, '-') as tipo_contrato"),
+                    DB::raw("COALESCE(p.nombre, '-') as predio")
+                )
+
+                ->where('rh.predio_id', $id)
+
+                ->orderBy('rh.nombres_apellidos', 'asc')
+
+                ->get();
+
+            return response()->json($personal);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error RRHH',
+                'error'   => $e->getMessage(),
+                'line'    => $e->getLine(),
+            ], 500);
+        }
+    }
+
+    /*public function insumosProductos(Request $request)
+    {
+        $mes = $request->query('mes');
+        $anio = $request->query('anio');
+
+        $data = DB::table('predio as p')
+            ->leftJoin('insumos_productos as ip', function ($join) use ($mes, $anio) {
+                $join->on('ip.predio', '=', 'p.id')
+                    ->whereMonth('ip.fecha', $mes)
+                    ->whereYear('ip.fecha', $anio);
+            })
+            ->select(
+                'p.id as predio',
+                'p.nombre',
+                DB::raw('COALESCE(SUM(ip.valor_total),0) as total_por_predio')
+            )
+            ->groupBy('p.id', 'p.nombre')
+            ->orderByDesc('total_por_predio')
+            ->get();
+
+        return response()->json($data);
+    }*/
 }

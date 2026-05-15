@@ -28,6 +28,17 @@ Route::middleware('auth:sanctum')->group(function () {
     //Route::post('/login',  [AuthenticatedSessionController::class, 'index']);
     //Route::get('tipo-documento',         [TipoDocumentoController::class,  'index']);
 
+
+    // DASHBOARD //
+    Route::get('dashboard',         [DashboardController::class,      'index']);
+    Route::get('/dashboard/predio/{id}', [DashboardController::class, 'vehiculosPorPredio']);
+    Route::get('/dashboard/recursoshumanos/{id}', [DashboardController::class, 'recursosHumanosPorPredio']);
+    Route::get('/dashboard/insumosproductos', [DashboardController::class, 'insumosProductos']);
+
+
+
+
+
     // PREDIO //
     Route::get('listaInsumosProductos', [InsumosServiciosController::class, 'getListaInsumosProductos']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
     Route::delete('deleteInsumosProductos/{numeroOrden}', [InsumosServiciosController::class, 'eliminarInsumosProductos']); // ELIMINO DE LA LISTA EL INSUMO Y PRODUCTOS PASANDO EL CODIGO ORDEN 
