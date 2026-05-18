@@ -108,6 +108,8 @@ class ParqueVehicularController extends Controller
                 'permiso_circulacion_img' => $permisoPath,
                 'seguro_obligatorio_img' => $seguroPath,
 
+                'condicion' => $request->condicion,
+
             ], 'orden');
 
 
@@ -192,7 +194,8 @@ class ParqueVehicularController extends Controller
                     'pv.vencimiento_seguro_obligatorio',
                     'pv.ultima_mantencion',
                     'pv.permiso_circulacion_img',
-                    'pv.seguro_obligatorio_img'
+                    'pv.seguro_obligatorio_img',
+                    'pv.condicion',
                 )
                 ->where('pv.uuid', $uuid)
                 ->first();
@@ -339,6 +342,7 @@ class ParqueVehicularController extends Controller
 
                     'permiso_circulacion_img' => $permisoPath,
                     'seguro_obligatorio_img' => $seguroPath,
+                    'condicion' => $request->condicion,
                 ]);
 
 

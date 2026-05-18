@@ -19,6 +19,8 @@ use App\Http\Controllers\PredioController;
 use App\Http\Controllers\RecursosHumanoController;
 use App\Http\Controllers\ContratosEfectuadosController;
 
+use App\Http\Controllers\ConfiguracionController;
+
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -34,10 +36,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/predio/{id}', [DashboardController::class, 'vehiculosPorPredio']);
     Route::get('/dashboard/recursoshumanos/{id}', [DashboardController::class, 'recursosHumanosPorPredio']);
     Route::get('/dashboard/insumosproductos', [DashboardController::class, 'insumosProductos']);
-
-
-
-
 
     // PREDIO //
     Route::get('listaInsumosProductos', [InsumosServiciosController::class, 'getListaInsumosProductos']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
@@ -100,7 +98,17 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 
-
+Route::prefix('configuracion')->group(function () {
+    Route::get('/{tabla}', [ConfiguracionController::class, 'index']);
+    Route::post('/{tabla}', [ConfiguracionController::class, 'store']);
+    Route::put('/{tabla}/{id}', [ConfiguracionController::class, 'update']);
+    Route::delete('/{tabla}/{id}', [ConfiguracionController::class, 'destroy']);
+    Route::patch('/{tabla}/{id}/reactivar', [ConfiguracionController::class, 'reactivar']);
+    Route::get(
+        '/estados/tipos',
+        [ConfiguracionController::class, 'tiposEstado']
+    );
+});
 
 
 // ── Solo administrador ────────────────────────────────────
