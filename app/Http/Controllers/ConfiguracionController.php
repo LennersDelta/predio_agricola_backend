@@ -160,7 +160,8 @@ class ConfiguracionController extends Controller
                 DB::table('estados')
                     ->where('id', $id)
                     ->update([
-                        'tipo' => strtoupper(trim($request->tipo)),
+                        //'tipo' => strtoupper(trim($request->tipo)), // COLOCAR TODO EL TEXTO EN MAYUSCULAS
+                        'tipo' => trim($request->tipo),
                         'nombre' => trim($request->descripcion),
                     ]);
             }

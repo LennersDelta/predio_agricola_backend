@@ -21,6 +21,10 @@ use App\Http\Controllers\ContratosEfectuadosController;
 
 use App\Http\Controllers\ConfiguracionController;
 
+use App\Http\Controllers\CombustibleAsignacionController;
+use App\Http\Controllers\IngresoCombustibleController;
+
+
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -84,7 +88,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('listaTipoVehiculos', [EstadosController::class, 'getListaTipoVehiculos']); // LISTO TODOS LOS VEHICULOS ACTIVO
     Route::get('listaTipoGrado', [EstadosController::class,'getListaTipoGrado']); // LISTO TODOS LOS GRADOS Y TAMBIEN INCLUYO UNO ADICIONAL QUE ("NO APLICA") 
     Route::get('listaTipoContrato', [EstadosController::class,'getListaTipoContrato']); // LISTO TODOS LOS TIPOS CONTRATOS
-
+    Route::get('listaTipoRol', [EstadosController::class,'getListaTipoRol']);
 
     // DOCUMENTOS - PREDIO //
     Route::delete('/documentos/{uuid}', [PredioController::class, 'eliminarDocumento']);
@@ -94,8 +98,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // Reportes
     // Route::get('reportes/regiones', [ReportesController::class, 'regiones']);
     // Route::get('reportes/comunas',  [ReportesController::class, 'comunas']);
+ 
+    // COMBUSTIBLE
+    
+    //Route::get('/combustible/asignaciones',[CombustibleController::class, 'asignaciones']);
+    //Route::post('/combustible', [CombustibleController::class, 'store']);
+    
 
+
+    });
+
+Route::prefix('combustible')->group(function(){
+    Route::post('/asignacion', [CombustibleAsignacionController::class, 'store']);
+    Route::get('/asignacion/disponibles', [CombustibleAsignacionController::class, 'disponibles']);
+    Route::post('/ingreso', [IngresoCombustibleController::class, 'store']);
 });
+
 
 
 Route::prefix('configuracion')->group(function () {
@@ -104,10 +122,7 @@ Route::prefix('configuracion')->group(function () {
     Route::put('/{tabla}/{id}', [ConfiguracionController::class, 'update']);
     Route::delete('/{tabla}/{id}', [ConfiguracionController::class, 'destroy']);
     Route::patch('/{tabla}/{id}/reactivar', [ConfiguracionController::class, 'reactivar']);
-    Route::get(
-        '/estados/tipos',
-        [ConfiguracionController::class, 'tiposEstado']
-    );
+    Route::get('/estados/tipos', [ConfiguracionController::class, 'tiposEstado']);
 });
 
 

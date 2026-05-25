@@ -86,4 +86,19 @@ class EstadosController extends Controller
         }
     }
 
+    public function getListaTipoRol()
+    {
+        try{
+            return response()->json(
+                DB::table('roles')                
+                ->orderBy('id')
+                ->get(['id', 'name'])
+            );
+        }catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

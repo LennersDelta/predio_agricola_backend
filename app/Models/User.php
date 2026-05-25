@@ -15,10 +15,20 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     protected $fillable = [
-        'name',
+        /*'name',
         'rut',       // ← campo de login
         'email',     // opcional
         'grado',
+        'password',*/
+        'rut',
+        'name',
+        'apellido_ap',
+        'apellido_mat',
+        'email',
+        'grado_id',
+        'tipo_contratacion',
+        'telefono',
+        'area_id',
         'password',
     ];
 
@@ -46,5 +56,14 @@ class User extends Authenticatable
         $dv        = strtoupper(substr($this->rut, -1));
         $conPuntos = number_format((int) $cuerpo, 0, ',', '.');
         return "{$conPuntos}-{$dv}";
+    }
+    public function grado()
+    {
+        return $this->belongsTo(Grado::class);
+    }
+
+    public function area()
+    {
+        return $this->belongsTo(Area::class);
     }
 }
