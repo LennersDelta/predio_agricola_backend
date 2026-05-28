@@ -8,6 +8,41 @@ use Illuminate\Support\Facades\DB;
 
 class CombustibleAsignacionController extends Controller
 {
+    public function index(): JsonResponse
+    {
+        try {
+
+            $items = DB::table('combustible_asignacion as ca')
+                ->join('predio as p', 'p.id', '=', 'ca.predio_id')
+                ->select(
+                    'ca.id',
+                    'p.nombre as predio',
+                    DB::raw("TO_CHAR(ca.mes, 'YYYY-MM') as mes"),
+                    'ca.monto_asignado',
+                    'ca.monto_utilizado',
+                    'ca.saldo',
+                    'ca.created_at',
+                    'ca.updated_at'
+                )
+                ->orderBy('ca.mes', 'desc')
+                ->orderBy('p.nombre', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $items
+            ], 200);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener asignaciones de combustible',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function store(Request $request): JsonResponse
     {
         try {
@@ -59,8 +94,35 @@ class CombustibleAsignacionController extends Controller
             ], 500);
         }
     }
-
     public function disponibles(): JsonResponse
+    {
+        $items = DB::table('combustible_asignacion as ca')
+            ->join(
+                'predio as p',
+                'p.id',
+                '=',
+                'ca.predio_id'
+            )
+            ->select(
+                'ca.id',
+                DB::raw("CONCAT(p.nombre , ' | ', TRIM(TO_CHAR(ca.mes, 'TMMonth')),
+                        ' ',
+                        EXTRACT(YEAR FROM ca.mes)
+                    ) as nombre
+                "),
+
+                'ca.saldo',
+                'ca.monto_asignado',
+                'ca.monto_utilizado'
+            )
+            ->where('ca.saldo', '>=', 0)
+            ->orderBy('ca.mes', 'desc')
+            ->get();
+
+        return response()->json($items);
+    }
+    
+   /* public function disponibles(): JsonResponse
     {
         $items = DB::table('combustible_asignacion as ca')
             ->join(
@@ -81,5 +143,47 @@ class CombustibleAsignacionController extends Controller
             ->orderBy('ca.mes', 'desc')
             ->get();
         return response()->json($items);
+    }*/
+
+    public function patentes($id): JsonResponse
+    {
+        $asignacion = DB::table('combustible_asignacion')
+            ->where('id', $id)
+            ->first();
+
+        if (!$asignacion) {
+            return response()->json([]);
+        }
+
+        $patentes = DB::table('parque_vehicular as pv')
+            ->join(
+                'tipo_vehiculo as tv',
+                'tv.id',
+                '=',
+                'pv.tipo_vehicular_id'
+            )
+            ->where('pv.predio', $asignacion->predio_id)
+            ->whereNotNull('pv.ppu')
+            ->select(
+                'pv.orden',
+                'pv.ppu',
+                DB::raw("
+                    CONCAT(
+                        tv.nombre,
+                        ' - ',
+                        pv.ppu
+                    ) as nombre
+                ")
+            )
+            ->orderBy('tv.nombre')
+            ->get();
+
+        return response()->json($patentes);
     }
+
+
+
+
+
+
 }
