@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class CombustibleAsignacionController extends Controller
 {
@@ -110,7 +111,6 @@ class CombustibleAsignacionController extends Controller
                         EXTRACT(YEAR FROM ca.mes)
                     ) as nombre
                 "),
-
                 'ca.saldo',
                 'ca.monto_asignado',
                 'ca.monto_utilizado'
@@ -121,7 +121,77 @@ class CombustibleAsignacionController extends Controller
 
         return response()->json($items);
     }
-    
+
+    public function detalle($id)
+    {
+        $detalle = DB::table('ingreso_combustible as ic')
+            ->select('ic.*')
+            ->where('ic.asignacion_id', $id)
+            ->orderBy('ic.id', 'desc')
+            ->get();
+
+        $detalle->transform(function ($item) {
+
+            if ($item->comprobante) {
+
+                $item->comprobante = route(
+                    'combustible.archivo',
+                    $item->id
+                );
+            }
+
+            return $item;
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $detalle
+        ]);
+    }
+
+    public function verArchivo($id)
+    {
+        $detalle = DB::table('ingreso_combustible')
+            ->where('id', $id)
+            ->first();
+
+        if (!$detalle || !$detalle->comprobante) {
+            abort(404, 'Documento no existe');
+        }
+
+        $path = $detalle->comprobante;
+
+        if (!Storage::disk('public')->exists($path)) {
+            abort(404, 'Archivo no encontrado');
+        }
+
+        $fullPath = Storage::disk('public')->path($path);
+
+        $mime = Storage::disk('public')->mimeType($path);
+
+        $extension = strtolower(
+            pathinfo($path, PATHINFO_EXTENSION)
+        );
+
+        // Word descarga
+        if (in_array($extension, ['doc', 'docx'])) {
+
+            return response()->download(
+                $fullPath,
+                basename($path),
+                ['Content-Type' => $mime]
+            );
+        }
+
+        // PDF / imágenes inline
+        return response()->file($fullPath, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline'
+        ]);
+    }
+
+
+
    /* public function disponibles(): JsonResponse
     {
         $items = DB::table('combustible_asignacion as ca')

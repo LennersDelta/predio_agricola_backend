@@ -25,6 +25,8 @@ use App\Http\Controllers\CombustibleAsignacionController;
 use App\Http\Controllers\IngresoCombustibleController;
 
 
+
+
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -92,44 +94,41 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // DOCUMENTOS - PREDIO //
     Route::delete('/documentos/{uuid}', [PredioController::class, 'eliminarDocumento']);
-    Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
-    Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
-
-    // Reportes
-    // Route::get('reportes/regiones', [ReportesController::class, 'regiones']);
-    // Route::get('reportes/comunas',  [ReportesController::class, 'comunas']);
- 
-    // COMBUSTIBLE
-    
-    //Route::get('/combustible/asignaciones',[CombustibleController::class, 'asignaciones']);
-    //Route::post('/combustible', [CombustibleController::class, 'store']);
-    
+    //Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
+    //Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']); 
 
 
     });
+    Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
+    Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
 
-Route::prefix('combustible')->group(function(){
-    // ASIGNACIONES 
-    Route::get( '/asignacion', [CombustibleAsignacionController::class, 'index'] ); 
-    Route::post( '/asignacion', [CombustibleAsignacionController::class, 'store'] ); 
-    Route::get( '/asignacion/disponibles', [CombustibleAsignacionController::class, 'disponibles'] ); 
-    Route::get( '/asignacion/{id}/patentes', [CombustibleAsignacionController::class, 'patentes'] ); 
+    Route::prefix('combustible')->group(function(){
+        // ASIGNACIONES 
+        Route::get( '/asignacion', [CombustibleAsignacionController::class, 'index'] ); 
+        Route::post( '/asignacion', [CombustibleAsignacionController::class, 'store'] ); 
+        Route::get( '/asignacion/disponibles', [CombustibleAsignacionController::class, 'disponibles'] ); 
+        Route::get( '/asignacion/{id}/patentes', [CombustibleAsignacionController::class, 'patentes'] ); 
+        // DETALLE
+        Route::get('/asignacion/{id}/detalle',[CombustibleAsignacionController::class, 'detalle']);
 
-    // INGRESOS
-    Route::get( '/', [IngresoCombustibleController::class, 'index'] ); 
-    Route::post( '/ingreso', [IngresoCombustibleController::class, 'store'] );
-});
+        // ARCHIVOS
+        Route::get( '/archivo/{id}',[CombustibleAsignacionController::class, 'verArchivo'])->name('combustible.archivo');
+
+        // INGRESOS
+        Route::get( '/', [IngresoCombustibleController::class, 'index'] ); 
+        Route::post( '/ingreso', [IngresoCombustibleController::class, 'store'] );
+    });
 
 
 
-Route::prefix('configuracion')->group(function () {
-    Route::get('/{tabla}', [ConfiguracionController::class, 'index']);
-    Route::post('/{tabla}', [ConfiguracionController::class, 'store']);
-    Route::put('/{tabla}/{id}', [ConfiguracionController::class, 'update']);
-    Route::delete('/{tabla}/{id}', [ConfiguracionController::class, 'destroy']);
-    Route::patch('/{tabla}/{id}/reactivar', [ConfiguracionController::class, 'reactivar']);
-    Route::get('/estados/tipos', [ConfiguracionController::class, 'tiposEstado']);
-});
+    Route::prefix('configuracion')->group(function () {
+        Route::get('/{tabla}', [ConfiguracionController::class, 'index']);
+        Route::post('/{tabla}', [ConfiguracionController::class, 'store']);
+        Route::put('/{tabla}/{id}', [ConfiguracionController::class, 'update']);
+        Route::delete('/{tabla}/{id}', [ConfiguracionController::class, 'destroy']);
+        Route::patch('/{tabla}/{id}/reactivar', [ConfiguracionController::class, 'reactivar']);
+        Route::get('/estados/tipos', [ConfiguracionController::class, 'tiposEstado']);
+    });
 
 
 // ── Solo administrador ────────────────────────────────────
