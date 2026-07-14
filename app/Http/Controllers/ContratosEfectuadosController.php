@@ -157,7 +157,7 @@ class ContratosEfectuadosController extends Controller
         }
     }
 
-/* UPDATE */
+    /* UPDATE */
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [

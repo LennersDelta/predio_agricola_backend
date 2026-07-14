@@ -139,9 +139,7 @@ class UsuarioController extends Controller
                 'message' => 'No puedes eliminar tu propia cuenta.',
             ], 403);
         }
-
         $usuario->delete();
-
         return response()->json([
             'message' => 'Usuario eliminado correctamente.',
         ]);

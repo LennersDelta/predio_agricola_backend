@@ -24,8 +24,11 @@ use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\CombustibleAsignacionController;
 use App\Http\Controllers\IngresoCombustibleController;
 
+use App\Http\Controllers\Compra3UTMController;
+use App\Http\Controllers\RendicionMensualController;
 
-
+use App\Http\Controllers\BoletaHonorarioController;
+use App\Http\Controllers\IngresosExtrasController;
 
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -96,11 +99,43 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/documentos/{uuid}', [PredioController::class, 'eliminarDocumento']);
     //Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
     //Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']); 
+   
+    // COMPRA 3 UTM //
+    Route::get('listaCompra3UTM', [Compra3UTMController::class, 'getListaCompra3UTM']);
+    Route::post('compra3utm/insert', [Compra3UtmController::class, 'insert']);
+    Route::delete('deleteCompra3UTM/{numeroOrden}', [Compra3UtmController::class, 'eliminarCompra3UTM']);    
+    Route::get('/compra3utm/{uuid}', [Compra3UtmController::class,'show']);
+    Route::post('/compra3utm/{uuid}', [Compra3UtmController::class, 'update']);
+
+    // RENDICION MENSUAL //
+
+    Route::get('listaRendicionMensual', [RendicionMensualController::class, 'getListaRendicionMensual']);
+    Route::post('rendicionmensual/insert', [RendicionMensualController::class, 'insert']);
+    Route::delete('deleteRendicionMensual/{numeroOrden}', [RendicionMensualController::class, 'eliminarRendicionMensual']);    
+    Route::get('/rendicionmensual/{uuid}', [RendicionMensualController::class,'show']);
+    Route::post('/rendicionmensual/{uuid}', [RendicionMensualController::class, 'update']);
+
+    // BOLETA HONORARIO //
+    Route::get('listaBoletaHonorario', [BoletaHonorarioController::class, 'getListaBoletaHonorario']);
+    Route::post('boletahonorario/insert', [BoletaHonorarioController::class, 'insert']);
+    Route::delete('deleteBoletaHonorario/{numeroOrden}', [BoletaHonorarioController::class, 'eliminarBoletaHonorario']);    
+    Route::get('/boletahonorario/{uuid}', [BoletaHonorarioController::class,'show']);
+    Route::post('/boletahonorario/{uuid}', [BoletaHonorarioController::class, 'update']);
+
+
 
 
     });
     Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
     Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
+
+
+    // INGRESOS EXTRAS //
+    Route::get('listaIngresosExtras', [IngresosExtrasController::class, 'getListaIngresosExtras']);
+    Route::post('ingresosextras/insert', [IngresosExtrasController::class, 'insert']);
+    Route::delete('deleteIngresosExtras/{numeroOrden}', [IngresosExtrasController::class, 'eliminarIngresosExtras']);    
+    Route::get('/ingresosextras/{uuid}', [IngresosExtrasController::class,'show']);
+    Route::post('/ingresosextras/{uuid}', [IngresosExtrasController::class, 'update']);
 
     Route::prefix('combustible')->group(function(){
         // ASIGNACIONES 
@@ -118,7 +153,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get( '/', [IngresoCombustibleController::class, 'index'] ); 
         Route::post( '/ingreso', [IngresoCombustibleController::class, 'store'] );
     });
-
 
 
     Route::prefix('configuracion')->group(function () {

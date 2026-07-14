@@ -52,6 +52,7 @@ class CombustibleAsignacionController extends Controller
                 'predio' => 'required|integer',
                 'mes' => 'required',
                 'monto' => 'required|numeric|min:1',
+                //'doeRespuestaB5' => 'required', VERIFICAR 09-06-2026
             ]);
 
             // convertir YYYY-MM -> YYYY-MM-01
@@ -78,6 +79,7 @@ class CombustibleAsignacionController extends Controller
                     'monto_asignado' => $validated['monto'],
                     'monto_utilizado' => 0,
                     'saldo' => $validated['monto'],
+                    //'doe_respuesta_b5' => $validated['doeRespuestaB5'], // NUEVO CAMPO
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -131,18 +133,14 @@ class CombustibleAsignacionController extends Controller
             ->get();
 
         $detalle->transform(function ($item) {
-
             if ($item->comprobante) {
-
                 $item->comprobante = route(
                     'combustible.archivo',
                     $item->id
                 );
             }
-
             return $item;
         });
-
         return response()->json([
             'success' => true,
             'data' => $detalle
