@@ -29,6 +29,7 @@ use App\Http\Controllers\RendicionMensualController;
 
 use App\Http\Controllers\BoletaHonorarioController;
 use App\Http\Controllers\IngresosExtrasController;
+use App\Http\Controllers\AnticipoRendirCuentaController;
 
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -122,20 +123,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/boletahonorario/{uuid}', [BoletaHonorarioController::class,'show']);
     Route::post('/boletahonorario/{uuid}', [BoletaHonorarioController::class, 'update']);
 
-
-
-
-    });
-    Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
-    Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
-
-
     // INGRESOS EXTRAS //
     Route::get('listaIngresosExtras', [IngresosExtrasController::class, 'getListaIngresosExtras']);
     Route::post('ingresosextras/insert', [IngresosExtrasController::class, 'insert']);
     Route::delete('deleteIngresosExtras/{numeroOrden}', [IngresosExtrasController::class, 'eliminarIngresosExtras']);    
     Route::get('/ingresosextras/{uuid}', [IngresosExtrasController::class,'show']);
     Route::post('/ingresosextras/{uuid}', [IngresosExtrasController::class, 'update']);
+
+    // ANTICIPO RENDIR CUENTAS //
+    Route::get('listaAnticipoRendirCuenta', [AnticipoRendirCuentaController::class, 'getListaAnticipoRendirCuenta']);
+    Route::post('anticiporendircuenta/insert', [AnticipoRendirCuentaController::class, 'insert']);
+    Route::delete('deleteAnticipoRendirCuenta/{numeroOrden}', [AnticipoRendirCuentaController::class, 'eliminarAnticipoRendirCuenta']);    
+    Route::get('/anticiporendircuenta/{uuid}', [AnticipoRendirCuentaController::class,'show']);
+    Route::post('/anticiporendircuenta/{uuid}', [AnticipoRendirCuentaController::class, 'update']);
+
+    });
+    Route::get('/documentos/{uuid}/ver', [PredioController::class, 'verDocumento']);
+    Route::get('/documentos/{uuid}/descargar', [PredioController::class, 'descargarDocumento']);
+
+
+
+
+
+
 
     Route::prefix('combustible')->group(function(){
         // ASIGNACIONES 
