@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 use Exception;
 
-class Compra3UTMController extends Controller
+class Compra3UTMController extends BaseController
 {
     public function getListaCompra3UTM(Request $request)
     {
@@ -67,11 +67,37 @@ class Compra3UTMController extends Controller
                 'updated_at'     => now(),
             ], 'orden');
 
+            // Recuperar el registro creado junto con el nombre del predio
+            $registro = DB::table('compra_utm as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $id)
+                ->first();
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Compra UTM',
+                accion: 'CREAR',
+                tabla: 'compra_utm',
+                registroId: $registro->orden,
+                descripcion: 'Se creó un nuevo registro de Compra UTM.',
+                despues: $registro
+            );
+
             DB::commit();
 
             return response()->json([
+                'success' => true,
                 'message' => 'Guardado correctamente',
-                'id'      => $id
+                'id'      => $id,
+                'uuid'    => $registro->uuid
             ], 201);
 
         } catch (\Exception $e) {
@@ -79,6 +105,7 @@ class Compra3UTMController extends Controller
             DB::rollBack();
 
             return response()->json([
+                'success' => false,
                 'message' => 'Error al guardar',
                 'error'   => $e->getMessage()
             ], 500);
@@ -87,24 +114,53 @@ class Compra3UTMController extends Controller
 
     public function eliminarCompra3UTM($numeroOrden)
     {
-        try {
-            $deleted = DB::table('compra_utm')
-                ->where('orden', $numeroOrden)
-                ->delete();
+        DB::beginTransaction();
 
-            if ($deleted) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro eliminado correctamente'
-                ], 200);
-            } else {
+        try {
+
+            // Recuperar el registro antes de eliminarlo
+            $registro = DB::table('compra_utm as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $numeroOrden)
+                ->first();
+
+            if (!$registro) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No se encontró el registro'
                 ], 404);
             }
 
+            // Auditoría
+            $this->auditar(
+                modulo: 'Compra UTM',
+                accion: 'ELIMINAR',
+                tabla: 'compra_utm',
+                registroId: $registro->orden,
+                descripcion: 'Se eliminó un registro de Compra UTM.',
+                antes: $registro
+            );
+
+            // Eliminar registro
+            DB::table('compra_utm')
+                ->where('orden', $numeroOrden)
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro eliminado correctamente'
+            ], 200);
+
         } catch (\Exception $e) {
+
+            DB::rollBack();
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar',
@@ -188,22 +244,31 @@ class Compra3UTMController extends Controller
 
         try {
 
-            $query = DB::table('compra_utm');
+            // Obtener el registro antes de modificarlo
+            $antes = DB::table('compra_utm as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                );
 
             if (is_numeric($id)) {
-                $query->where('orden', $id);
+                $antes->where('c.orden', $id);
             } else {
-                $query->where('uuid', $id);
+                $antes->where('c.uuid', $id);
             }
 
-            $existe = $query->first();
-            if (!$existe) {
+            $antes = $antes->first();
+
+            if (!$antes) {
                 return response()->json([
                     'message' => 'Registro no encontrado'
                 ], 404);
             }
 
+            // Actualizar
             $updateQuery = DB::table('compra_utm');
+
             if (is_numeric($id)) {
                 $updateQuery->where('orden', $id);
             } else {
@@ -211,26 +276,52 @@ class Compra3UTMController extends Controller
             }
 
             $updateQuery->update([
-                'predio_id'        => (int) $request->predio_id,
-                'proveedor'        => $request->proveedor,
-                'factura'          => $request->factura,
-                'fecha'            => $request->fecha,
-                'monto'            => $request->monto,
-                'materia'          => $request->materia,
-                'estado_id'        => (int) $request->estado_id,
-                'doe_envio_ab5'    => $request->doe_envio_ab5,
-                'observaciones'    => $request->observaciones,
-                'updated_at'       => now(),
+                'predio_id'      => (int) $request->predio_id,
+                'proveedor'      => $request->proveedor,
+                'factura'        => $request->factura,
+                'fecha'          => $request->fecha,
+                'monto'          => $request->monto,
+                'materia'        => $request->materia,
+                'estado_id'      => (int) $request->estado_id,
+                'doe_envio_ab5'  => $request->doe_envio_ab5,
+                'observaciones'  => $request->observaciones,
+                'updated_at'     => now(),
             ]);
 
+            // Obtener el registro actualizado
+            $despues = DB::table('compra_utm as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $antes->orden)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Compra UTM',
+                accion: 'ACTUALIZAR',
+                tabla: 'compra_utm',
+                registroId: $antes->orden,
+                descripcion: 'Se actualizó un registro de Compra UTM.',
+                antes: $antes,
+                despues: $despues
+            );
+
             DB::commit();
+
             return response()->json([
+                'success' => true,
                 'message' => 'Compra 3 UTM actualizada correctamente'
             ]);
 
         } catch (\Exception $e) {
+
             DB::rollBack();
+
             return response()->json([
+                'success' => false,
                 'message' => 'Error al actualizar',
                 'error'   => $e->getMessage()
             ], 500);

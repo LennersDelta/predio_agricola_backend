@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-class InsumosServiciosController extends Controller
+class InsumosServiciosController extends BaseController
 {
     public function getListaInsumosProductos(Request $request)
     {
@@ -42,81 +42,104 @@ class InsumosServiciosController extends Controller
         return response()->json($query->get());
     }
 
-
     public function eliminarInsumosProductos($numeroOrden)
     {
+        DB::beginTransaction();
+
         try {
 
-            $existe = DB::table('insumosproductos')
-                ->where('orden', $numeroOrden)
-                ->exists();
+            // Obtener el registro antes de eliminarlo, incluyendo el nombre del predio
+            $registro = DB::table('insumosproductos as ip')
+                ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
+                ->select(
+                    'ip.*',
+                    DB::raw('ip.predio as predio_id'),
+                    DB::raw('p.nombre as predio_nombre')
+                )
+                ->where('ip.orden', $numeroOrden)
+                ->first();
 
-            if (!$existe) {
+            if (!$registro) {
+                DB::rollBack();
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'No existe la orden '.$numeroOrden
-                ],404);
+                    'message' => 'No existe la orden ' . $numeroOrden
+                ], 404);
             }
 
+            // Auditoría
+            $this->auditar(
+                modulo: 'Insumos y Productos',
+                accion: 'ELIMINAR',
+                tabla: 'insumosproductos',
+                registroId: $registro->orden,
+                descripcion: 'Se eliminó un registro de Insumos y Productos.',
+                antes: $registro
+            );
+
+            // Eliminar registro
             $deleted = DB::table('insumosproductos')
                 ->where('orden', $numeroOrden)
                 ->delete();
 
-            return response()->json([
-                'success'=>true,
-                'message'=>'Registros eliminados correctamente',
-                'orden'=>$numeroOrden,
-                'filas_eliminadas'=>$deleted
-            ]);
-
-        } catch(\Exception $e){
+            DB::commit();
 
             return response()->json([
-                'success'=>false,
-                'message'=>'Error al eliminar registros',
-                'error'=>$e->getMessage()
-            ],500);
+                'success' => true,
+                'message' => 'Registro eliminado correctamente.',
+                'orden' => $numeroOrden,
+                'filas_eliminadas' => $deleted
+            ], 200);
 
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar el registro.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
-
     public function insertar(Request $request)
     {
-        $validator = Validator::make($request->all(),[
-            'predio' => ['required','integer'],
+        $validator = Validator::make($request->all(), [
+            'predio' => ['required', 'integer'],
 
-            'producto_servicio' => ['required','string','max:255'],
-            'empresa' => ['required','string','max:255'],
+            'producto_servicio' => ['required', 'string', 'max:255'],
+            'empresa' => ['required', 'string', 'max:255'],
 
-            'fecha_cotizacion' => ['required','date'],
-            'valor_cotizacion' => ['required','numeric','min:0'],
+            'fecha_cotizacion' => ['required', 'date'],
+            'valor_cotizacion' => ['required', 'numeric', 'min:0'],
 
-            'tipo_compra' => ['required','integer'],
-            'etapa' => ['required','string','max:100'],
+            'tipo_compra' => ['required', 'integer'],
+            'etapa' => ['required', 'string', 'max:100'],
 
-            'numero_orden' => ['required','string','max:100'],
-            'estado_orden' => ['required','integer'],
+            'numero_orden' => ['required', 'string', 'max:100'],
+            'estado_orden' => ['required', 'integer'],
 
-            'fecha_orden' => ['required','date'],
-            'valor_total' => ['required','numeric','min:0'],
+            'fecha_orden' => ['required', 'date'],
+            'valor_total' => ['required', 'numeric', 'min:0'],
 
-            'numero_factura' => ['required','string','max:100'],
-            'fecha_factura' => ['required','date'],
+            'numero_factura' => ['required', 'string', 'max:100'],
+            'fecha_factura' => ['required', 'date'],
 
-            'proveedor' => ['required','string','max:255'],
-            'estado_factura' => ['required','integer'],
+            'proveedor' => ['required', 'string', 'max:255'],
+            'estado_factura' => ['required', 'integer'],
 
-            'observaciones' => ['nullable','string'],
+            'observaciones' => ['nullable', 'string'],
 
-            'doerespuesta' => ['required','string','max:255'],
+            'doerespuesta' => ['required', 'string', 'max:255'],
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
-                'message'=>$validator->errors()->first(),
-                'errors'=>$validator->errors()
-            ],422);
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors()
+            ], 422);
         }
 
         DB::beginTransaction();
@@ -128,48 +151,67 @@ class InsumosServiciosController extends Controller
             $id = DB::table('insumosproductos')->insertGetId([
                 'uuid'              => $uuid,
 
-                'predio'            => (int)$request->predio,
+                'predio'            => (int) $request->predio,
                 'producto_servicio' => $request->producto_servicio,
-
                 'empresa'           => $request->empresa,
                 'fecha_cotizacion'  => $request->fecha_cotizacion,
                 'valor_cotizacion'  => $request->valor_cotizacion,
-
-                'tipo_compra'       => (int)$request->tipo_compra,
+                'tipo_compra'       => (int) $request->tipo_compra,
                 'etapa'             => $request->etapa,
-
                 'numero_orden'      => $request->numero_orden,
-                'estado_orden'      => (int)$request->estado_orden,
+                'estado_orden'      => (int) $request->estado_orden,
                 'fecha_orden'       => $request->fecha_orden,
                 'valor_total'       => $request->valor_total,
-
                 'numero_factura'    => $request->numero_factura,
                 'fecha_factura'     => $request->fecha_factura,
                 'proveedor'         => $request->proveedor,
-                'estado_factura'    => (int)$request->estado_factura,
+                'estado_factura'    => (int) $request->estado_factura,
+                'observaciones'     => $request->observaciones,
+                'doerespuesta'      => $request->doerespuesta,
 
-                'observaciones'     => $request->observaciones ?? null,
-                'doerespuesta'      => $request->doerespuesta
+            ], 'orden');
 
-            ],'orden');
+            // Recuperar el registro recién creado con el nombre del predio
+            $registro = DB::table('insumosproductos as ip')
+                ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
+                ->select(
+                    'ip.*',
+                    DB::raw('ip.predio as predio_id'),
+                    DB::raw('p.nombre as predio_nombre')
+                )
+                ->where('ip.orden', $id)
+                ->first();
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Insumos y Productos',
+                accion: 'CREAR',
+                tabla: 'insumosproductos',
+                registroId: $registro->orden,
+                descripcion: 'Se creó un nuevo registro de Insumos y Productos.',
+                despues: $registro
+            );
 
             DB::commit();
 
             return response()->json([
-                'message'=>'Registro guardado correctamente',
-                'id'=>$id,
-                'uuid'=>$uuid
-            ],201);
+                'message' => 'Registro guardado correctamente',
+                'id'      => $id,
+                'uuid'    => $uuid
+            ], 201);
 
-        } catch(\Exception $e){
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
             return response()->json([
-                'message'=>'Error al guardar',
-                'error'=>$e->getMessage()
-            ],500);
-
+                'message' => 'Error al guardar',
+                'error'   => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -232,116 +274,129 @@ class InsumosServiciosController extends Controller
         }
     }
 
-
-
     // UPDATE POR UUID O ORDEN
-    public function update(Request $request,$id)
+    public function update(Request $request, $id)
     {
-        $validator = Validator::make($request->all(),[
-            'predio' => ['required','integer'],
-
-            'producto_servicio' => ['required','string','max:255'],
-            'empresa' => ['required','string','max:255'],
-
-            'fecha_cotizacion' => ['required','date'],
-            'valor_cotizacion' => ['required','numeric','min:0'],
-
-            'tipo_compra' => ['required','integer'],
-            'etapa' => ['required','string','max:100'],
-
-            'numero_orden' => ['required','string','max:100'],
-            'estado_orden' => ['required','integer'],
-
-            'fecha_orden' => ['required','date'],
-            'valor_total' => ['required','numeric','min:0'],
-
-            'numero_factura' => ['required','string','max:100'],
-            'fecha_factura' => ['required','date'],
-
-            'proveedor' => ['required','string','max:255'],
-            'estado_factura' => ['required','integer'],
-
-            'observaciones' => ['nullable','string'],
-
-            'doerespuesta' => ['required','string','max:255'],
+        $validator = Validator::make($request->all(), [
+            'predio' => ['required', 'integer'],
+            'producto_servicio' => ['required', 'string', 'max:255'],
+            'empresa' => ['required', 'string', 'max:255'],
+            'fecha_cotizacion' => ['required', 'date'],
+            'valor_cotizacion' => ['required', 'numeric', 'min:0'],
+            'tipo_compra' => ['required', 'integer'],
+            'etapa' => ['required', 'string', 'max:100'],
+            'numero_orden' => ['required', 'string', 'max:100'],
+            'estado_orden' => ['required', 'integer'],
+            'fecha_orden' => ['required', 'date'],
+            'valor_total' => ['required', 'numeric', 'min:0'],
+            'numero_factura' => ['required', 'string', 'max:100'],
+            'fecha_factura' => ['required', 'date'],
+            'proveedor' => ['required', 'string', 'max:255'],
+            'estado_factura' => ['required', 'integer'],
+            'observaciones' => ['nullable', 'string'],
+            'doerespuesta' => ['required', 'string', 'max:255'],
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
-                'message'=>$validator->errors()->first()
-            ],422);
+                'message' => $validator->errors()->first()
+            ], 422);
         }
 
         DB::beginTransaction();
 
         try {
 
-            $query = DB::table('insumosproductos');
+            // Estado anterior con nombre del predio
+            $antes = DB::table('insumosproductos as ip')
+                ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
+                ->select(
+                    'ip.*',
+                    DB::raw('ip.predio as predio_id'),
+                    DB::raw('p.nombre as predio_nombre')
+                );
 
-            if(is_numeric($id)){
-                $query->where('orden',$id);
+            if (is_numeric($id)) {
+                $antes->where('ip.orden', $id);
             } else {
-                $query->where('uuid',$id);
+                $antes->where('ip.uuid', $id);
             }
 
-            $existe = $query->first();
+            $antes = $antes->first();
 
-            if(!$existe){
+            if (!$antes) {
+                DB::rollBack();
+
                 return response()->json([
-                    'message'=>'Registro no encontrado'
-                ],404);
+                    'message' => 'Registro no encontrado'
+                ], 404);
             }
 
+            // Actualizar registro
             $updateQuery = DB::table('insumosproductos');
 
-            if(is_numeric($id)){
-                $updateQuery->where('orden',$id);
+            if (is_numeric($id)) {
+                $updateQuery->where('orden', $id);
             } else {
-                $updateQuery->where('uuid',$id);
+                $updateQuery->where('uuid', $id);
             }
 
             $updateQuery->update([
-
-                'predio'=>(int)$request->predio,
-                'producto_servicio'=>$request->producto_servicio,
-
-                'empresa'=>$request->empresa,
-                'fecha_cotizacion'=>$request->fecha_cotizacion,
-                'valor_cotizacion'=>$request->valor_cotizacion,
-
-                'tipo_compra'=>(int)$request->tipo_compra,
-                'etapa'=>$request->etapa,
-
-                'numero_orden'=>$request->numero_orden,
-                'estado_orden'=>(int)$request->estado_orden,
-                'fecha_orden'=>$request->fecha_orden,
-                'valor_total'=>$request->valor_total,
-
-                'numero_factura'=>$request->numero_factura,
-                'fecha_factura'=>$request->fecha_factura,
-                'proveedor'=>$request->proveedor,
-                'estado_factura'=>(int)$request->estado_factura,
-
-                'observaciones'=>$request->observaciones ?? null,
-                'doerespuesta'=>$request->doerespuesta
-
+                'predio'             => (int) $request->predio,
+                'producto_servicio'  => $request->producto_servicio,
+                'empresa'            => $request->empresa,
+                'fecha_cotizacion'   => $request->fecha_cotizacion,
+                'valor_cotizacion'   => $request->valor_cotizacion,
+                'tipo_compra'        => (int) $request->tipo_compra,
+                'etapa'              => $request->etapa,
+                'numero_orden'       => $request->numero_orden,
+                'estado_orden'       => (int) $request->estado_orden,
+                'fecha_orden'        => $request->fecha_orden,
+                'valor_total'        => $request->valor_total,
+                'numero_factura'     => $request->numero_factura,
+                'fecha_factura'      => $request->fecha_factura,
+                'proveedor'          => $request->proveedor,
+                'estado_factura'     => (int) $request->estado_factura,
+                'observaciones'      => $request->observaciones,
+                'doerespuesta'       => $request->doerespuesta,
             ]);
+
+            // Estado posterior con nombre del predio
+            $despues = DB::table('insumosproductos as ip')
+                ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
+                ->select(
+                    'ip.*',
+                    DB::raw('ip.predio as predio_id'),
+                    DB::raw('p.nombre as predio_nombre')
+                )
+                ->where('ip.orden', $antes->orden)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Insumos y Productos',
+                accion: 'ACTUALIZAR',
+                tabla: 'insumosproductos',
+                registroId: $antes->orden,
+                descripcion: 'Se actualizó un registro de Insumos y Productos.',
+                antes: $antes,
+                despues: $despues
+            );
 
             DB::commit();
 
             return response()->json([
-                'message'=>'Registro actualizado correctamente'
+                'message' => 'Registro actualizado correctamente'
             ]);
 
-        } catch(\Exception $e){
+        } catch (\Exception $e) {
 
             DB::rollBack();
 
             return response()->json([
-                'message'=>'Error al actualizar',
-                'error'=>$e->getMessage()
-            ],500);
-
+                'message' => 'Error al actualizar',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }

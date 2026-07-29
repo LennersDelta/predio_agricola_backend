@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\FacturaAgua;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
-class FacturaAguaController extends Controller
+class FacturaAguaController extends BaseController
 {
     public function index()
     {
@@ -31,6 +34,7 @@ class FacturaAguaController extends Controller
 
         return response()->json($facturas);
     }
+
     public function insert(Request $request)
     {
         $data = $request->validate([
@@ -62,31 +66,118 @@ class FacturaAguaController extends Controller
             'cantidadConsumoKilos.max'      => 'La cantidad de kilos no puede superar 10 caracteres.',
         ]);
 
-        FacturaAgua::create([
-            'predio_id'   => $data['predio'],
-            'n_factura'   => $data['nroFactura'],
-            'mes_consumo' => \Carbon\Carbon::createFromFormat('Y-m', $data['mesConsumo'])->startOfMonth()->toDateString(),
-            'valor'       => $data['valorTotal'],
-            'proveedor'   => $data['proveedor'],
-            'estado_id'   => $data['estadoFactura'],
-            'doe'         => $data['doeRespuestaB5'],
-            'consumo'     => $data['cantidadConsumoKilos'],
-            'user_id'     => Auth::id(),
-        ]);
+        DB::beginTransaction();
 
-        return response()->json([
-            'message' => 'Factura de agua ingresada correctamente.',
-            'data'    => [],
-        ], 201);
+        try {
+
+            $factura = FacturaAgua::create([
+                'predio_id'   => $data['predio'],
+                'n_factura'   => $data['nroFactura'],
+                'mes_consumo' => \Carbon\Carbon::createFromFormat('Y-m', $data['mesConsumo'])
+                    ->startOfMonth()
+                    ->toDateString(),
+                'valor'       => $data['valorTotal'],
+                'proveedor'   => $data['proveedor'],
+                'estado_id'   => $data['estadoFactura'],
+                'doe'         => $data['doeRespuestaB5'],
+                'consumo'     => $data['cantidadConsumoKilos'],
+                'user_id'     => Auth::id(),
+            ]);
+
+            $registro = DB::table('factura_agua as f')
+                ->leftJoin('predio as p', 'f.predio_id', '=', 'p.id')
+                ->select(
+                    'f.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('f.id', $factura->id)
+                ->first();
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+            $this->auditar(
+                modulo: 'Factura Agua',
+                accion: 'CREAR',
+                tabla: 'factura_agua',
+                registroId: $registro->id,
+                descripcion: 'Se creó una factura de agua.',
+                despues: $registro,
+                predioId: $registro->predio_id,
+                predioNombre: $registro->predio_nombre
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Factura de agua ingresada correctamente.',
+                'data'    => [],
+            ], 201);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al guardar la factura de agua.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy($id)
     {
-        $factura = FacturaAgua::findOrFail($id);
-        $factura->delete();
+        DB::beginTransaction();
 
-        return response()->json([
-            'message' => 'Factura de agua eliminada correctamente.',
-        ]);
+        try {
+
+            $registro = DB::table('factura_agua as f')
+                ->leftJoin('predio as p', 'f.predio_id', '=', 'p.id')
+                ->select(
+                    'f.id',
+                    'f.predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('f.id', $id)
+                ->first();
+
+            if (!$registro) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Factura de agua no encontrada.'
+                ], 404);
+            }
+
+            $this->auditar(
+                modulo: 'Factura Agua',
+                accion: 'ELIMINAR',
+                tabla: 'factura_agua',
+                registroId: $registro->id,
+                descripcion: 'Se eliminó una factura de agua.',
+                antes: $registro,
+                predioId: $registro->predio_id,
+                predioNombre: $registro->predio_nombre
+            );
+
+            $factura = FacturaAgua::findOrFail($id);
+            $factura->delete(); // Soft Delete
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Factura de agua eliminada correctamente.',
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar la factura de agua.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

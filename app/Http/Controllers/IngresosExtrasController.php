@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 use Exception;
 
-class IngresosExtrasController extends Controller
+class IngresosExtrasController extends BaseController
 {
     public function getListaIngresosExtras(Request $request)
     {
@@ -39,24 +39,60 @@ class IngresosExtrasController extends Controller
                 'observaciones'   => 'nullable|string',
             ]);
 
-            DB::table('ingresos_extras')->insert([
-                'predio_id'       => $request->predio_id,
-                'item_venta'      => $request->item_venta,
-                'dte_resolucion'  => $request->dte_resolucion,
-                'valor_total'     => $request->valor_total,
-                'fecha'           => $request->fecha,
-                'estado_pago'     => $request->estado_pago,
-                'doe_informa_ab5' => $request->doe_informa_ab5,
-                'observaciones'   => $request->observaciones,
-                'uuid'            => Str::uuid(),
-                'created_at'      => now(),
-                'updated_at'      => now(),
-            ]);
+            DB::beginTransaction();
+            try {
+                $id = DB::table('ingresos_extras')->insertGetId([
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Ingreso extra registrado correctamente.'
-            ], 201);
+                    'predio_id'       => $request->predio_id,
+                    'item_venta'      => $request->item_venta,
+                    'dte_resolucion'  => $request->dte_resolucion,
+                    'valor_total'     => $request->valor_total,
+                    'fecha'           => $request->fecha,
+                    'estado_pago'     => $request->estado_pago,
+                    'doe_informa_ab5' => $request->doe_informa_ab5,
+                    'observaciones'   => $request->observaciones,
+                    'uuid'            => Str::uuid(),
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+
+                ], 'orden');
+
+                // Recuperar registro creado con nombre del predio
+                $registro = DB::table('ingresos_extras as i')
+                    ->leftJoin('predio as p', 'i.predio_id', '=', 'p.id')
+                    ->select(
+                        'i.*',
+                        'p.nombre as predio_nombre'
+                    )
+                    ->where('i.orden', $id)
+                    ->first();
+
+                if (!$registro) {
+                    throw new Exception('No fue posible recuperar el registro creado.');
+                }
+
+                // Auditoría
+                $this->auditar(
+                    modulo: 'Ingresos Extras',
+                    accion: 'CREAR',
+                    tabla: 'ingresos_extras',
+                    registroId: $registro->orden,
+                    descripcion: 'Se creó un ingreso extra.',
+                    despues: $registro
+                );
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Ingreso extra registrado correctamente.',
+                    'id'      => $id
+                ], 201);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -76,24 +112,52 @@ class IngresosExtrasController extends Controller
 
     public function eliminarIngresosExtras($numeroOrden)
     {
-        try {
-            $deleted = DB::table('ingresos_extras')
-                ->where('orden', $numeroOrden)
-                ->delete();
+        DB::beginTransaction();
 
-            if ($deleted) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro eliminado correctamente'
-                ], 200);
-            } else {
+        try {
+            // Recuperar registro antes de eliminar con nombre del predio
+            $registro = DB::table('ingresos_extras as i')
+                ->leftJoin('predio as p', 'i.predio_id', '=', 'p.id')
+                ->select(
+                    'i.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('i.orden', $numeroOrden)
+                ->first();
+
+            if (!$registro) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No se encontró el registro'
                 ], 404);
             }
 
+            // Auditoría antes de eliminar
+            $this->auditar(
+                modulo: 'Ingresos Extras',
+                accion: 'ELIMINAR',
+                tabla: 'ingresos_extras',
+                registroId: $registro->orden,
+                descripcion: 'Se eliminó un ingreso extra.',
+                antes: $registro
+            );
+
+            // Eliminar registro
+            $deleted = DB::table('ingresos_extras')
+                ->where('orden', $numeroOrden)
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro eliminado correctamente',
+                'orden' => $numeroOrden,
+                'filas_eliminadas' => $deleted
+            ], 200);
+
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar',
@@ -172,23 +236,29 @@ class IngresosExtrasController extends Controller
         DB::beginTransaction();
 
         try {
-
-            $query = DB::table('ingresos_extras');
+            // Obtener registro anterior con nombre del predio
+            $query = DB::table('ingresos_extras as i')
+                ->leftJoin('predio as p', 'i.predio_id', '=', 'p.id')
+                ->select(
+                    'i.*',
+                    'p.nombre as predio_nombre'
+                );
 
             if (is_numeric($id)) {
-                $query->where('orden', $id);
+                $query->where('i.orden', $id);
             } else {
-                $query->where('uuid', $id);
+                $query->where('i.uuid', $id);
             }
 
-            $existe = $query->first();
+            $antes = $query->first();
 
-            if (!$existe) {
+            if (!$antes) {
                 return response()->json([
                     'message' => 'Ingreso extra no encontrado.'
                 ], 404);
             }
 
+            // Actualizar registro
             $updateQuery = DB::table('ingresos_extras');
 
             if (is_numeric($id)) {
@@ -209,17 +279,38 @@ class IngresosExtrasController extends Controller
                 'updated_at'      => now(),
             ]);
 
+            // Obtener registro actualizado
+            $despues = DB::table('ingresos_extras as i')
+                ->leftJoin('predio as p', 'i.predio_id', '=', 'p.id')
+                ->select(
+                    'i.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('i.orden', $antes->orden)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Ingresos Extras',
+                accion: 'ACTUALIZAR',
+                tabla: 'ingresos_extras',
+                registroId: $antes->orden,
+                descripcion: 'Se actualizó un ingreso extra.',
+                antes: $antes,
+                despues: $despues
+            );
+
             DB::commit();
 
             return response()->json([
+                'success' => true,
                 'message' => 'Ingreso extra actualizado correctamente.'
             ]);
 
         } catch (\Exception $e) {
-
             DB::rollBack();
-
             return response()->json([
+                'success' => false,
                 'message' => 'Error al actualizar el ingreso extra.',
                 'error'   => $e->getMessage()
             ], 500);

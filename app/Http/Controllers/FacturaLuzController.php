@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\FacturaLuz;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 
-class FacturaLuzController extends Controller
+class FacturaLuzController extends BaseController
 {
     public function index()
     {
@@ -32,6 +35,7 @@ class FacturaLuzController extends Controller
 
         return response()->json($facturas);
     }
+
     public function insert(Request $request)
     {
         $data = $request->validate([
@@ -82,31 +86,117 @@ class FacturaLuzController extends Controller
             'cantidadConsumoKilos.max'           => 'La cantidad de kilos no puede superar 10 caracteres.',
         ]);
 
-        FacturaLuz::create([
-            'predio_id' => $data['predio'],
-            'n_factura' => $data['nroFactura'],
-            'mes_consumo' => \Carbon\Carbon::createFromFormat('Y-m', $data['mesConsumo'])->startOfMonth()->toDateString(),
-            'valor'       => $data['valorTotal'],
-            'proveedor'   => $data['proveedor'],
-            'estado_id'   => $data['estadoFactura'],
-            'doe'         => $data['doeRespuestaB5'],
-            'consumo'     => $data['cantidadConsumoKilos'],
-            'user_id'     => Auth::id(),
-        ]);
+        DB::beginTransaction();
 
-        return response()->json([
-            'message' => 'Factura de luz ingresada correctamente.',
-            'data'    => [],
-        ], 201);
+        try {
+
+            $factura = FacturaLuz::create([
+                'predio_id'    => $data['predio'],
+                'n_factura'    => $data['nroFactura'],
+                'mes_consumo'  => \Carbon\Carbon::createFromFormat('Y-m', $data['mesConsumo'])
+                                    ->startOfMonth()
+                                    ->toDateString(),
+                'valor'        => $data['valorTotal'],
+                'proveedor'    => $data['proveedor'],
+                'estado_id'    => $data['estadoFactura'],
+                'doe'          => $data['doeRespuestaB5'],
+                'consumo'      => $data['cantidadConsumoKilos'],
+                'user_id'      => Auth::id(),
+            ]);
+
+            $registro = DB::table('factura_luz as f')
+                ->leftJoin('predio as p', 'f.predio_id', '=', 'p.id')
+                ->select(
+                    'f.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('f.id', $factura->id)
+                ->first();
+
+            if (!$registro) {
+                throw new \Exception('No fue posible recuperar el registro creado.');
+            }
+
+            $this->auditar(
+                modulo: 'Factura Luz',
+                accion: 'CREAR',
+                tabla: 'factura_luz',
+                registroId: $registro->id,
+                descripcion: 'Se creó una factura de luz.',
+                despues: $registro,
+                predioId: $registro->predio_id,
+                predioNombre: $registro->predio_nombre
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Factura de luz ingresada correctamente.',
+                'data'    => [],
+            ], 201);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al guardar la factura.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy($id)
     {
-        $factura = FacturaLuz::findOrFail($id);
-        $factura->delete(); // ← solo setea deleted_at, no borra la fila
+        DB::beginTransaction();
 
-        return response()->json([
-            'message' => 'Factura eliminada correctamente.',
-        ]);
+        try {
+            $registro = FacturaLuz::query()
+                ->leftJoin('predio as p', 'factura_luz.predio_id', '=', 'p.id')
+                ->select(
+                    'factura_luz.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('factura_luz.id', $id)
+                ->first();
+
+            if (!$registro) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Factura no encontrada.'
+                ], 404);
+            }
+
+            $this->auditar(
+                modulo: 'Factura Luz',
+                accion: 'ELIMINAR',
+                tabla: 'factura_luz',
+                registroId: $registro->id,
+                descripcion: 'Se eliminó una factura de luz.',
+                antes: $registro,
+                predioId: $registro->predio_id,
+                predioNombre: $registro->predio_nombre
+            );
+
+            $factura = FacturaLuz::findOrFail($id);
+            $factura->delete(); // Soft Delete
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Factura eliminada correctamente.',
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar la factura.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

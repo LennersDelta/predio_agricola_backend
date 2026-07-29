@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Services\LogService;
 
-class RecursosHumanoController extends Controller
+class RecursosHumanoController extends BaseController
 {
     public function getListaRecursosHumanos(Request $request)
     {
@@ -80,8 +80,45 @@ class RecursosHumanoController extends Controller
                 'fecha_inicio_contrato' => $request->fechaInicioContrato,
                 'anios_servicio' => $request->aniosServicio,
                 'ultima_calificacion' => $request->ultimaCalificacion,
-                'capacitado_prevencion_riesgo' => $request->capacitadoPrevencionRiesgo === 'si',
+                'capacitado_prevencion_riesgo' =>  $request->capacitadoPrevencionRiesgo === 'si',
+                'created_at' => now(),
+                'updated_at' => now(),
             ], 'orden');
+
+            /*
+            |--------------------------------------------------------------------------
+            | RECUPERAR REGISTRO CREADO PARA AUDITORÍA
+            |--------------------------------------------------------------------------
+            */
+            $registro = DB::table('recursos_humanos as rh')
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->select(
+                    'rh.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('rh.orden', $id)
+                ->first();
+
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | AUDITORÍA
+            |--------------------------------------------------------------------------
+            */
+            $this->auditar(
+                modulo: 'Recursos Humanos',
+                accion: 'CREAR',
+                tabla: 'recursos_humanos',
+                registroId: $registro->orden,
+                descripcion: 'Se creó un registro de recurso humano.',
+                despues: $registro
+            );
 
             DB::commit();
 
@@ -91,9 +128,7 @@ class RecursosHumanoController extends Controller
             ],201);
 
         } catch(\Exception $e){
-
             DB::rollBack();
-
             return response()->json([
                 'message'=>'Error al guardar',
                 'error'=>$e->getMessage()
@@ -103,24 +138,64 @@ class RecursosHumanoController extends Controller
 
     public function eliminarRecursosHumanos($numeroOrden)
     {
-        try {
-            $deleted = DB::table('recursos_humanos')
-                ->where('orden', $numeroOrden)
-                ->delete();
+        DB::beginTransaction();
 
-            if ($deleted) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro eliminado correctamente'
-                ], 200);
-            } else {
+        try {
+            /*
+            |--------------------------------------------------------------------------
+            | OBTENER REGISTRO ANTES DE ELIMINAR
+            |--------------------------------------------------------------------------
+            */
+            $registro = DB::table('recursos_humanos as rh')
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->select(
+                    'rh.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('rh.orden', $numeroOrden)
+                ->first();
+
+            if (!$registro) {
+
                 return response()->json([
                     'success' => false,
                     'message' => 'No se encontró el registro'
                 ], 404);
             }
+            /*
+            |--------------------------------------------------------------------------
+            | AUDITORÍA ANTES DE ELIMINAR
+            |--------------------------------------------------------------------------
+            */
+            $this->auditar(
+                modulo: 'Recursos Humanos',
+                accion: 'ELIMINAR',
+                tabla: 'recursos_humanos',
+                registroId: $registro->orden,
+                descripcion: 'Se eliminó un registro de recursos humanos.',
+                antes: $registro
+            );
+            /*
+            |--------------------------------------------------------------------------
+            | ELIMINAR REGISTRO
+            |--------------------------------------------------------------------------
+            */
+            $deleted = DB::table('recursos_humanos')
+                ->where('orden', $numeroOrden)
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro eliminado correctamente',
+                'orden' => $numeroOrden,
+                'filas_eliminadas' => $deleted
+            ], 200);
 
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar',
@@ -223,22 +298,38 @@ class RecursosHumanoController extends Controller
 
         try {
 
-            $query = DB::table('recursos_humanos');
+            /*
+            |--------------------------------------------------------------------------
+            | REGISTRO ANTES DE ACTUALIZAR
+            |--------------------------------------------------------------------------
+            */
+            $query = DB::table('recursos_humanos as rh')
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->select(
+                    'rh.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                );
 
             if (is_numeric($id)) {
-                $query->where('orden', $id);
+                $query->where('rh.orden', $id);
             } else {
-                $query->where('uuid', $id);
+                $query->where('rh.uuid', $id);
             }
 
-            $existe = $query->first();
+            $registroAnterior = $query->first();
 
-            if (!$existe) {
+            if (!$registroAnterior) {
                 return response()->json([
                     'message' => 'Registro no encontrado'
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | ACTUALIZAR REGISTRO
+            |--------------------------------------------------------------------------
+            */
             $updateQuery = DB::table('recursos_humanos');
 
             if (is_numeric($id)) {
@@ -248,6 +339,7 @@ class RecursosHumanoController extends Controller
             }
 
             $updateQuery->update([
+
                 'predio_id' => (int) $request->predio_id,
 
                 'grado_id' => (int) $request->grado_id,
@@ -265,7 +357,40 @@ class RecursosHumanoController extends Controller
                 'capacitado_prevencion_riesgo' => (bool) $request->capacitado_prevencion_riesgo,
 
                 'tipo_contrato_id' => (int) $request->tipo_contrato_id,
+
+                'updated_at' => now()
+
             ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | REGISTRO DESPUÉS DE ACTUALIZAR
+            |--------------------------------------------------------------------------
+            */
+            $registroDespues = DB::table('recursos_humanos as rh')
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->select(
+                    'rh.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('rh.orden', $registroAnterior->orden)
+                ->first();
+
+            /*
+            |--------------------------------------------------------------------------
+            | AUDITORÍA
+            |--------------------------------------------------------------------------
+            */
+            $this->auditar(
+                modulo: 'Recursos Humanos',
+                accion: 'ACTUALIZAR',
+                tabla: 'recursos_humanos',
+                registroId: $registroAnterior->orden,
+                descripcion: 'Se actualizó un registro de recursos humanos.',
+                antes: $registroAnterior,
+                despues: $registroDespues
+            );
 
             DB::commit();
 
@@ -274,9 +399,7 @@ class RecursosHumanoController extends Controller
             ]);
 
         } catch (\Exception $e) {
-
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al actualizar',
                 'error' => $e->getMessage()

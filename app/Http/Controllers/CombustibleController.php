@@ -45,36 +45,23 @@ class CombustibleController extends Controller
     public function store(Request $request): JsonResponse
     {
         DB::beginTransaction();
-
         try {
-
             $user = auth()->user();
-
             /*
             |--------------------------------------------------------------------------
             | ADMINISTRADOR
             |--------------------------------------------------------------------------
             */
-
             if ($user->is_admin) {
-
                 $validated = $request->validate([
                     'predio'      => 'required|integer',
                     'mesConsumo'  => 'required|date',
                     'valorTotal'  => 'required|numeric|min:1',
                 ]);
 
-                $existe = DB::table(
-                    'combustible_asignacion'
-                )
-                    ->where(
-                        'predio_id',
-                        $validated['predio']
-                    )
-                    ->where(
-                        'mes',
-                        $validated['mesConsumo']
-                    )
+                $existe = DB::table('combustible_asignacion')
+                    ->where('predio_id', $validated['predio'])
+                    ->where('mes', $validated['mesConsumo'])
                     ->exists();
 
                 if ($existe) {
@@ -83,42 +70,39 @@ class CombustibleController extends Controller
                     );
                 }
 
-                $monto = (float)
-                    $validated['valorTotal'];
+                $monto = (float) $validated['valorTotal'];
 
-                $id = DB::table(
-                    'combustible_asignacion'
-                )
+                $id = DB::table('combustible_asignacion')
                     ->insertGetId([
-                        'predio_id' =>
-                            $validated['predio'],
-
-                        'mes' =>
-                            $validated['mesConsumo'],
-
-                        'monto_asignado' =>
-                            $monto,
-
-                        'monto_utilizado' =>
-                            0,
-
-                        'saldo' =>
-                            $monto,
-
-                        'created_at' =>
-                            now(),
-
-                        'updated_at' =>
-                            now(),
+                        'predio_id'        => $validated['predio'],
+                        'mes'              => $validated['mesConsumo'],
+                        'monto_asignado'   => $monto,
+                        'monto_utilizado'  => 0,
+                        'saldo'            => $monto,
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
                     ]);
+
+                // Auditoría
+                $registro = DB::table('combustible_asignacion')
+                    ->where('id', $id)
+                    ->first();
+
+                $this->auditar(
+                    modulo: 'Combustible',
+                    accion: 'CREAR',
+                    tabla: 'combustible_asignacion',
+                    registroId: $id,
+                    descripcion: 'Creó una asignación de combustible.',
+                    despues: $registro
+                );
 
                 DB::commit();
 
                 return response()->json([
                     'success' => true,
-                    'message' =>
-                        'Asignación creada correctamente.',
-                    'id' => $id,
+                    'message' => 'Asignación creada correctamente.',
+                    'id'      => $id,
                 ]);
             }
 
@@ -129,47 +113,25 @@ class CombustibleController extends Controller
             */
 
             $validated = $request->validate([
-                'asignacionId' =>
-                    'required|integer',
-
-                'orden' =>
-                    'required|string|max:100',
-
-                'nroFactura' =>
-                    'required|string|max:100',
-
-                'proveedor' =>
-                    'required|string|max:255',
-
-                'estadoFactura' =>
-                    'required|string|max:50',
-
-                'doeRespuestaB5' =>
-                    'required|string|max:100',
-
-                'cantidadConsumoLitros' =>
-                    'required|numeric|min:1',
-
-                'monto' =>
-                    'required|numeric|min:1',
-
-                'comprobante' =>
-                    'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
+                'asignacionId'          => 'required|integer',
+                'orden'                 => 'required|string|max:100',
+                'nroFactura'            => 'required|string|max:100',
+                'proveedor'             => 'required|string|max:255',
+                'estadoFactura'         => 'required|string|max:50',
+                'doeRespuestaB5'        => 'required|string|max:100',
+                'cantidadConsumoLitros' => 'required|numeric|min:1',
+                'monto'                 => 'required|numeric|min:1',
+                'comprobante'           => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
             ]);
 
             /*
             |--------------------------------------------------------------------------
-            | BUSCAR ASIGNACION
+            | BUSCAR ASIGNACIÓN
             |--------------------------------------------------------------------------
             */
 
-            $asignacion = DB::table(
-                'combustible_asignacion'
-            )
-                ->where(
-                    'id',
-                    $validated['asignacionId']
-                )
+            $asignacion = DB::table('combustible_asignacion')
+                ->where('id', $validated['asignacionId'])
                 ->lockForUpdate()
                 ->first();
 
@@ -179,8 +141,7 @@ class CombustibleController extends Controller
                 );
             }
 
-            $monto = (float)
-                $validated['monto'];
+            $monto = (float) $validated['monto'];
 
             /*
             |--------------------------------------------------------------------------
@@ -188,10 +149,7 @@ class CombustibleController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            if (
-                $monto >
-                $asignacion->saldo
-            ) {
+            if ($monto > $asignacion->saldo) {
                 throw new \Exception(
                     'El monto excede el saldo disponible.'
                 );
@@ -216,53 +174,69 @@ class CombustibleController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            DB::table(
-                'ingreso_combustible'
-            )
-                ->insert([
-                    'asignacion_id' =>  $validated['asignacionId'],
-                    'orden' =>          $validated['orden'],
-                    'numero_factura' => $validated['nroFactura'],
-                    'proveedor' =>      $validated['proveedor'],
-                    'estado_factura' => $validated['estadoFactura'],
-                    'doe_respuesta'  => $validated['doeRespuestaB5'],
-                    'litros' =>         $validated['cantidadConsumoLitros'],
-                    'monto' =>          $monto,
-                    'comprobante' =>    $path,
-                    'created_at' =>     now(),
-                    'updated_at' =>     now(),
+            $idIngreso = DB::table('ingreso_combustible')
+                ->insertGetId([
+                    'asignacion_id'   => $validated['asignacionId'],
+                    'orden'           => $validated['orden'],
+                    'numero_factura'  => $validated['nroFactura'],
+                    'proveedor'       => $validated['proveedor'],
+                    'estado_factura'  => $validated['estadoFactura'],
+                    'doe_respuesta'   => $validated['doeRespuestaB5'],
+                    'litros'          => $validated['cantidadConsumoLitros'],
+                    'monto'           => $monto,
+                    'comprobante'     => $path,
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
                 ]);
+
+            // Auditoría ingreso
+            $registroIngreso = DB::table('ingreso_combustible')
+                ->where('id', $idIngreso)
+                ->first();
+
+            $this->auditar(
+                modulo: 'Combustible',
+                accion: 'CREAR',
+                tabla: 'ingreso_combustible',
+                registroId: $idIngreso,
+                descripcion: 'Registró un ingreso de combustible.',
+                despues: $registroIngreso
+            );
 
             /*
             |--------------------------------------------------------------------------
-            | ACTUALIZAR ASIGNACION
+            | ACTUALIZAR ASIGNACIÓN
             |--------------------------------------------------------------------------
             */
 
-            DB::table(
-                'combustible_asignacion'
-            )
-                ->where(
-                    'id',
-                    $validated['asignacionId']
-                )
-                ->update([
-                    'monto_utilizado' =>
-                        $asignacion->monto_utilizado + $monto,
+            $antes = clone $asignacion;
 
-                    'saldo' =>
-                        $asignacion->saldo - $monto,
+            $datosActualizar = [
+                'monto_utilizado' => $asignacion->monto_utilizado + $monto,
+                'saldo'           => $asignacion->saldo - $monto,
+                'updated_at'      => now(),
+            ];
 
-                    'updated_at' =>
-                        now(),
-                ]);
+            DB::table('combustible_asignacion')
+                ->where('id', $validated['asignacionId'])
+                ->update($datosActualizar);
+
+            // Auditoría actualización saldo
+            $this->auditar(
+                modulo: 'Combustible',
+                accion: 'ACTUALIZAR',
+                tabla: 'combustible_asignacion',
+                registroId: $asignacion->id,
+                descripcion: 'Actualizó el saldo de la asignación de combustible.',
+                antes: $antes,
+                despues: $datosActualizar
+            );
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' =>
-                    'Ingreso registrado correctamente.',
+                'message' => 'Ingreso registrado correctamente.',
             ]);
 
         } catch (\Throwable $e) {
@@ -271,8 +245,7 @@ class CombustibleController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' =>
-                    $e->getMessage(),
+                'message' => $e->getMessage(),
             ], 500);
         }
     }

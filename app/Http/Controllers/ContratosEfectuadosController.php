@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-class ContratosEfectuadosController extends Controller
+class ContratosEfectuadosController extends BaseController
 {
     public function getListaContratos(Request $request)
     {
@@ -51,6 +51,7 @@ class ContratosEfectuadosController extends Controller
         }
 
         DB::beginTransaction();
+
         try {
             $id = DB::table('contratos')->insertGetId([
                 'predio_id' => $request->predio_id,
@@ -67,7 +68,33 @@ class ContratosEfectuadosController extends Controller
                 'fecha_creacion' => now(),
             ], 'orden');
 
+
+            $registro = DB::table('contratos as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $id)
+                ->first();
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+
+            $this->auditar(
+                modulo: 'Contratos',
+                accion: 'CREAR',
+                tabla: 'contratos',
+                registroId: $registro->orden,
+                descripcion: 'Se creó un contrato.',
+                despues: $registro
+            );
+
             DB::commit();
+
             return response()->json([
                 'message' => 'Guardado correctamente',
                 'id' => $id
@@ -84,24 +111,67 @@ class ContratosEfectuadosController extends Controller
 
     public function eliminarContratos($numeroOrden)
     {
-        try {
-            $deleted = DB::table('contratos')
-                ->where('orden', $numeroOrden)
-                ->delete();
+        DB::beginTransaction();
 
-            if ($deleted) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro eliminado correctamente'
-                ], 200);
-            } else {
+        try {
+            /*
+            |--------------------------------------------------------------------------
+            | OBTENER REGISTRO ANTES DE ELIMINAR
+            |--------------------------------------------------------------------------
+            */
+            $registro = DB::table('contratos as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $numeroOrden)
+                ->first();
+
+            if (!$registro) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No se encontró el registro'
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | AUDITORÍA
+            |--------------------------------------------------------------------------
+            */
+            $this->auditar(
+                modulo: 'Contratos',
+                accion: 'ELIMINAR',
+                tabla: 'contratos',
+                registroId: $registro->orden,
+                descripcion: 'Se eliminó un contrato.',
+                antes: $registro
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | ELIMINAR REGISTRO
+            |--------------------------------------------------------------------------
+            */
+            $deleted = DB::table('contratos')
+                ->where('orden', $numeroOrden)
+                ->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro eliminado correctamente',
+                'orden' => $numeroOrden,
+                'filas_eliminadas' => $deleted
+            ], 200);
+
         } catch (\Exception $e) {
+
+            DB::rollBack();
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar',
@@ -174,6 +244,7 @@ class ContratosEfectuadosController extends Controller
             'doe_respuesta_b5' => ['required', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
             'uuid' => ['nullable', 'string']
+
         ]);
 
         if ($validator->fails()) {
@@ -186,22 +257,38 @@ class ContratosEfectuadosController extends Controller
 
         try {
 
-            $query = DB::table('contratos');
+            /*
+            |--------------------------------------------------------------------------
+            | REGISTRO ANTES DE ACTUALIZAR
+            |--------------------------------------------------------------------------
+            */
+            $query = DB::table('contratos as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                );
 
             if (is_numeric($id)) {
-                $query->where('orden', $id);
+                $query->where('c.orden', $id);
             } else {
-                $query->where('uuid', $id);
+                $query->where('c.uuid', $id);
             }
 
-            $existe = $query->first();
+            $registroAnterior = $query->first();
 
-            if (!$existe) {
+            if (!$registroAnterior) {
                 return response()->json([
                     'message' => 'Registro no encontrado'
                 ], 404);
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | ACTUALIZAR
+            |--------------------------------------------------------------------------
+            */
             $updateQuery = DB::table('contratos');
 
             if (is_numeric($id)) {
@@ -211,7 +298,6 @@ class ContratosEfectuadosController extends Controller
             }
 
             $updateQuery->update([
-
                 'predio_id' => (int) $request->predio_id,
                 'contrato' => $request->contrato,
                 'fecha' => $request->fecha,
@@ -223,13 +309,46 @@ class ContratosEfectuadosController extends Controller
                 'vigencia_contrato' => $request->vigencia_contrato,
                 'doe_respuesta_b5' => $request->doe_respuesta_b5,
                 'observaciones' => $request->observaciones,
+                'fecha_modificacion' => now(),
             ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | REGISTRO DESPUÉS DE ACTUALIZAR
+            |--------------------------------------------------------------------------
+            */
+            $registroDespues = DB::table('contratos as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.id as predio_id',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('c.orden', $registroAnterior->orden)
+                ->first();
+
+            /*
+            |--------------------------------------------------------------------------
+            | AUDITORÍA
+            |--------------------------------------------------------------------------
+            */
+            $this->auditar(
+                modulo: 'Contratos',
+                accion: 'ACTUALIZAR',
+                tabla: 'contratos',
+                registroId: $registroAnterior->orden,
+                descripcion: 'Se actualizó un contrato.',
+                antes: $registroAnterior,
+                despues: $registroDespues
+            );
+
             DB::commit();
+
             return response()->json([
                 'message' => 'Contrato actualizado correctamente'
             ]);
-        } catch (\Exception $e) {
 
+        } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'message' => 'Error al actualizar',

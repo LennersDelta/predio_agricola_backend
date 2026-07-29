@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 use Exception;
 
-class AnticipoRendirCuentaController extends Controller
+class AnticipoRendirCuentaController extends BaseController
 {
     public function getListaAnticipoRendirCuenta(Request $request)
     {
@@ -39,24 +39,50 @@ class AnticipoRendirCuentaController extends Controller
                 'observaciones'     => 'nullable|string',
             ]);
 
-            DB::table('anticipo_rendir_cuenta')->insert([
-                'predio_id'        => $request->predio_id,
-                'numero_cuenta'    => $request->numero_cuenta,
-                'nombre_cuenta'    => $request->nombre_cuenta,
-                'monto'            => $request->monto,
-                'compra'           => $request->compra,
-                'fecha'            => $request->fecha,
-                'doe_respuesta_b5' => $request->doe_respuesta_b5,
-                'observaciones'    => $request->observaciones,
-                'uuid'             => Str::uuid(),
-                'created_at'       => now(),
-                'updated_at'       => now(),
-            ]);
+
+            $id = DB::table('anticipo_rendir_cuenta')->insertGetId(
+                [
+                    'predio_id'        => $request->predio_id,
+                    'numero_cuenta'    => $request->numero_cuenta,
+                    'nombre_cuenta'    => $request->nombre_cuenta,
+                    'monto'            => $request->monto,
+                    'compra'           => $request->compra,
+                    'fecha'            => $request->fecha,
+                    'doe_respuesta_b5' => $request->doe_respuesta_b5,
+                    'observaciones'    => $request->observaciones,
+                    'uuid'             => Str::uuid(),
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ],
+                'orden'
+            );
+
+
+            $registro = DB::table('anticipo_rendir_cuenta')
+                ->where('orden', $id)
+                ->first();
+
+
+            if (!$registro) {
+                throw new Exception('No fue posible recuperar el registro creado.');
+            }
+
+
+            $this->auditar(
+                modulo: 'Anticipo Rendir Cuenta',
+                accion: 'CREAR',
+                tabla: 'anticipo_rendir_cuenta',
+                registroId: $registro->orden,
+                descripcion: 'Se creó un anticipo a rendir cuenta.',
+                despues: $registro
+            );
+
 
             return response()->json([
                 'success' => true,
                 'message' => 'Anticipo a rendir cuenta registrado correctamente.'
             ], 201);
+
 
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -66,6 +92,7 @@ class AnticipoRendirCuentaController extends Controller
                 'errors'  => $e->errors()
             ], 422);
 
+
         } catch (\Exception $e) {
 
             return response()->json([
@@ -73,35 +100,60 @@ class AnticipoRendirCuentaController extends Controller
                 'message' => 'Error al guardar el anticipo a rendir cuenta.',
                 'error'   => $e->getMessage()
             ], 500);
-
         }
     }
 
     public function eliminarAnticipoRendirCuenta($numeroOrden)
     {
         try {
-            $deleted = DB::table('anticipo_rendir_cuenta')
-                ->where('orden', $numeroOrden)
-                ->delete();
 
-            if ($deleted) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro eliminado correctamente'
-                ], 200);
-            } else {
+            // Obtener registro antes de eliminar
+            $registro = DB::table('anticipo_rendir_cuenta')
+                ->where('orden', $numeroOrden)
+                ->first();
+
+
+            if (!$registro) {
+
                 return response()->json([
                     'success' => false,
                     'message' => 'No se encontró el registro'
                 ], 404);
+
             }
 
+
+            // Registrar auditoría antes de eliminar
+            $this->auditar(
+                modulo: 'Anticipo Rendir Cuenta',
+                accion: 'ELIMINAR',
+                tabla: 'anticipo_rendir_cuenta',
+                registroId: $registro->orden,
+                descripcion: 'Eliminó un anticipo a rendir cuenta.',
+                antes: $registro
+            );
+
+
+            // Eliminar registro
+            DB::table('anticipo_rendir_cuenta')
+                ->where('orden', $numeroOrden)
+                ->delete();
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro eliminado correctamente'
+            ], 200);
+
+
         } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar',
                 'error' => $e->getMessage()
             ], 500);
+
         }
     }
     
@@ -129,17 +181,21 @@ class AnticipoRendirCuentaController extends Controller
                 ->where('a.uuid', $uuid)
                 ->first();
 
+
             if (!$registro) {
+
                 return response()->json([
                     'ok' => false,
                     'message' => 'Anticipo a rendir cuenta no encontrado.'
                 ], 404);
+
             }
 
             return response()->json([
                 'ok' => true,
                 'data' => $registro
             ]);
+
 
         } catch (\Throwable $e) {
 
@@ -148,6 +204,7 @@ class AnticipoRendirCuentaController extends Controller
                 'message' => 'Error al obtener el anticipo a rendir cuenta.',
                 'error' => $e->getMessage()
             ], 500);
+
         }
     }
 
@@ -183,15 +240,16 @@ class AnticipoRendirCuentaController extends Controller
             } else {
                 $query->where('uuid', $id);
             }
+            // Registro antes de modificar
+            $registroAnterior = $query->first();
 
-            $registro = $query->first();
-
-            if (!$registro) {
+            if (!$registroAnterior) {
                 return response()->json([
                     'message' => 'Anticipo a rendir cuenta no encontrado.'
                 ], 404);
             }
 
+            // Actualizar
             $updateQuery = DB::table('anticipo_rendir_cuenta');
 
             if (is_numeric($id)) {
@@ -211,6 +269,23 @@ class AnticipoRendirCuentaController extends Controller
                 'observaciones'    => $request->observaciones,
                 'updated_at'       => now(),
             ]);
+
+            // Registro actualizado
+            $registroActualizado = DB::table('anticipo_rendir_cuenta')
+                ->where('orden', $registroAnterior->orden)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Anticipo Rendir Cuenta',
+                accion: 'EDITAR',
+                tabla: 'anticipo_rendir_cuenta',
+                registroId: $registroAnterior->orden,
+                //nombreRegistro: $registroActualizado->nombre_cuenta,
+                descripcion: 'Actualizó un anticipo a rendir cuenta.',
+                antes: $registroAnterior,
+                despues: $registroActualizado
+            );
 
             DB::commit();
 

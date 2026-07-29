@@ -188,31 +188,6 @@ class CombustibleAsignacionController extends Controller
         ]);
     }
 
-
-
-   /* public function disponibles(): JsonResponse
-    {
-        $items = DB::table('combustible_asignacion as ca')
-            ->join(
-                'predio as p',
-                'p.id',
-                '=',
-                'ca.predio_id'
-            )
-            ->select(
-                'ca.id',
-                'p.nombre as predio',
-                'ca.mes',
-                'ca.saldo',
-                'ca.monto_asignado',
-                'ca.monto_utilizado'
-            )
-            ->where('ca.saldo', '>', 0)
-            ->orderBy('ca.mes', 'desc')
-            ->get();
-        return response()->json($items);
-    }*/
-
     public function patentes($id): JsonResponse
     {
         $asignacion = DB::table('combustible_asignacion')
