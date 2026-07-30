@@ -54,8 +54,7 @@ class BaseController extends Controller
                     ->where('id', $predioId)
                     ->value('nombre');
             }
-
-
+            
             DB::table('auditoria')->insert([
                 'usuario_id'      => $usuario?->id,
                 'rut'             => $usuario?->rut,

@@ -169,22 +169,22 @@ Route::middleware('auth:sanctum')->group(function () {
         // ASIGNACIONES
         Route::get('/asignacion', [CombustibleAsignacionController::class, 'index']);
         Route::post('/asignacion', [CombustibleAsignacionController::class, 'store']);
+        Route::put('/asignacion/{id}', [CombustibleAsignacionController::class, 'actualizarAsignacion']);
+
         Route::get('/asignacion/disponibles', [CombustibleAsignacionController::class, 'disponibles']);
         Route::get('/asignacion/{id}/patentes', [CombustibleAsignacionController::class, 'patentes']);
         Route::get('/asignacion/{id}/detalle', [CombustibleAsignacionController::class, 'detalle']);
 
-        Route::get('/archivo/{id}', [CombustibleAsignacionController::class, 'verArchivo'])
-            ->name('combustible.archivo');
+        Route::delete('deleteDetalleCombustible/{id}', [CombustibleAsignacionController::class, 'eliminarDetalleCombustible']);
 
         // INGRESOS
         Route::get('/', [IngresoCombustibleController::class, 'index']);
         Route::post('/ingreso', [IngresoCombustibleController::class, 'store']);
-        Route::delete('/deleteIngresoCombustible/{id}', [IngresoCombustibleController::class, 'eliminarIngresoCombustible']);    
+        Route::delete('/deleteIngresoCombustible/{id}', [IngresoCombustibleController::class, 'eliminarIngresoCombustible']);
 
     });
 
-
-
+    Route::get('/archivo/{id}', [CombustibleAsignacionController::class, 'verArchivo'])->name('combustible.archivo');
 
 
 

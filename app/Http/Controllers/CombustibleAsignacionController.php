@@ -7,7 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
-class CombustibleAsignacionController extends Controller
+class CombustibleAsignacionController extends BaseController
 {
     public function index(): JsonResponse
     {
@@ -153,39 +153,36 @@ class CombustibleAsignacionController extends Controller
             ->where('id', $id)
             ->first();
 
-        if (!$detalle || !$detalle->comprobante) {
-            abort(404, 'Documento no existe');
+
+        if (!$detalle) {
+            abort(404, 'Registro no encontrado');
         }
+
+
+        if (!$detalle->comprobante) {
+            abort(404, 'Este registro no tiene archivo adjunto');
+        }
+
 
         $path = $detalle->comprobante;
 
+
         if (!Storage::disk('public')->exists($path)) {
-            abort(404, 'Archivo no encontrado');
+
+            return response()->json([
+                'error' => 'Archivo no encontrado',
+                'ruta' => $path
+            ],404);
         }
 
-        $fullPath = Storage::disk('public')->path($path);
 
-        $mime = Storage::disk('public')->mimeType($path);
-
-        $extension = strtolower(
-            pathinfo($path, PATHINFO_EXTENSION)
+        return response()->file(
+            Storage::disk('public')->path($path),
+            [
+                'Content-Type' => Storage::disk('public')->mimeType($path),
+                'Content-Disposition' => 'inline'
+            ]
         );
-
-        // Word descarga
-        if (in_array($extension, ['doc', 'docx'])) {
-
-            return response()->download(
-                $fullPath,
-                basename($path),
-                ['Content-Type' => $mime]
-            );
-        }
-
-        // PDF / imágenes inline
-        return response()->file($fullPath, [
-            'Content-Type' => $mime,
-            'Content-Disposition' => 'inline'
-        ]);
     }
 
     public function patentes($id): JsonResponse
@@ -224,9 +221,134 @@ class CombustibleAsignacionController extends Controller
         return response()->json($patentes);
     }
 
+    public function eliminarDetalleCombustible($id)
+    {
+        DB::beginTransaction();
+        try {
 
+            $registro = DB::table('ingreso_combustible')
+                ->where('id', $id)
+                ->first();
 
+            if (!$registro) {
+                return response()->json([
+                    'message' => 'Registro no encontrado.'
+                ], 404);
+            }
 
+            // Auditoría antes de eliminar
+            $this->auditar(
+                modulo: 'Eliminar detalle combustible',
+                accion: 'ELIMINAR',
+                tabla: 'asignacion_combustible',
+                registroId: $registro->id,
+                descripcion: 'Se eliminó un detalle de ingreso de combustible.',
+                antes: $registro
+            );
 
+            // Eliminamos el ingreso
+            DB::table('ingreso_combustible')
+                ->where('id', $id)
+                ->delete();
 
+            // Recalcular monto utilizado
+            $montoUtilizado = DB::table('ingreso_combustible')
+                ->where('asignacion_id', $registro->asignacion_id)
+                ->sum('monto');
+
+            // Obtener monto asignado
+            $asignacion = DB::table('combustible_asignacion')
+                ->where('id', $registro->asignacion_id)
+                ->first();
+
+            if ($asignacion) {
+
+                DB::table('combustible_asignacion')
+                    ->where('id', $registro->asignacion_id)
+                    ->update([
+                        'monto_utilizado' => $montoUtilizado,
+                        'saldo' => $asignacion->monto_asignado - $montoUtilizado,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Detalle eliminado correctamente.'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al eliminar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function actualizarAsignacion(Request $request, $id)
+    {
+        DB::beginTransaction();
+
+        try {
+
+            $request->validate([
+                'monto_asignado' => 'required|numeric|min:0',
+            ]);
+
+            $registroAnterior = DB::table('combustible_asignacion')
+                ->where('id', $id)
+                ->first();
+
+            if (!$registroAnterior) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'La asignación no existe.'
+                ], 404);
+            }
+            // Calcular el nuevo saldo
+            $saldo = $request->monto_asignado - $registroAnterior->monto_utilizado;
+
+            DB::table('combustible_asignacion')
+                ->where('id', $id)
+                ->update([
+                    'monto_asignado'  => $request->monto_asignado,
+                    'saldo'           => $saldo,
+                    'updated_at'      => now(),
+                ]);
+                
+            $registroNuevo = DB::table('combustible_asignacion')
+                ->where('id', $id)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Asignación de Combustible',
+                accion: 'ACTUALIZAR',
+                tabla: 'combustible_asignacion',
+                registroId: $registroNuevo->id,
+                descripcion: 'Se actualizó una asignación de combustible.',
+                antes: $registroAnterior,
+                despues: $registroNuevo
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Asignación actualizada correctamente.'
+            ]);
+
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar la asignación.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
 }
