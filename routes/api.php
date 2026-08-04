@@ -34,6 +34,31 @@ use App\Http\Controllers\AnticipoRendirCuentaController;
 // ── Autenticado (cualquier rol) ───────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
+    // ** PERFIL USUARIO **
+    Route::put('/perfil/password', function(Request $request) {
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password'         => ['required', 'string', 'min:8', 'confirmed'],
+        ], [
+            'current_password.required' => 'Ingrese su contraseña actual.',
+            'password.required'         => 'Ingrese la nueva contraseña.',
+            'password.min'              => 'Mínimo 8 caracteres.',
+            'password.confirmed'        => 'Las contraseñas no coinciden.',
+        ]);
+
+        $user = $request->user();
+        if (!\Illuminate\Support\Facades\Hash::check($data['current_password'], $user->password)) {
+            return response()->json([
+                'message' => 'La contraseña actual es incorrecta.',
+                'errors'  => ['current_password' => ['La contraseña actual es incorrecta.']],
+            ], 422);
+        }
+
+        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($data['password'])]);
+        return response()->json(['message' => 'Contraseña actualizada correctamente.']);
+    });
+
+
     Route::get('/user', fn(Request $r) => new UserResource($r->user()));
     Route::get('dashboard',         [DashboardController::class,      'index']);
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy']);

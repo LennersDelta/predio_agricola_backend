@@ -9,6 +9,9 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
+use App\Models\Grado;
+use App\Models\Contratacion;
+
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -57,13 +60,14 @@ class User extends Authenticatable
         $conPuntos = number_format((int) $cuerpo, 0, ',', '.');
         return "{$conPuntos}-{$dv}";
     }
+    
     public function grado()
     {
-        return $this->belongsTo(Grado::class);
+        return $this->belongsTo(Grado::class, 'grado_id');
     }
 
-    public function area()
+    public function contratacion()
     {
-        return $this->belongsTo(Area::class);
+        return $this->belongsTo(Contratacion::class, 'tipo_contratacion', 'id');
     }
 }
