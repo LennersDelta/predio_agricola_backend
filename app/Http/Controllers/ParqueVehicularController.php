@@ -39,7 +39,7 @@ class ParqueVehicularController extends BaseController
             | VALIDACIONES
             |--------------------------------------------------------------------------
             */
-            $request->validate([
+          $request->validate([
                 'predio'              => 'required|integer',
                 'tipo_vehicular'      => 'required|integer',
                 'ppu'                 => 'required|string|max:20',
@@ -51,29 +51,27 @@ class ParqueVehicularController extends BaseController
                 'fondo_adquisicion'   => 'required|string|max:255',
 
                 'permiso.0.archivo' => [
-                    'required',
+                    'nullable',
                     'file',
                     'mimes:pdf,doc,docx',
                     'max:2048', // 2 MB
                 ],
 
                 'seguro.0.archivo' => [
-                    'required',
+                    'nullable',
                     'file',
                     'mimes:pdf,doc,docx',
                     'max:2048', // 2 MB
                 ],
             ], [
 
-                'permiso.0.archivo.required' => 'Debe adjuntar el permiso de circulación.',
-                'permiso.0.archivo.file'     => 'El permiso no corresponde a un archivo válido.',
-                'permiso.0.archivo.mimes'    => 'El permiso debe ser PDF, DOC o DOCX.',
-                'permiso.0.archivo.max'      => 'El permiso no puede superar los 2 MB.',
+                'permiso.0.archivo.file'  => 'El permiso no corresponde a un archivo válido.',
+                'permiso.0.archivo.mimes' => 'El permiso debe ser PDF, DOC o DOCX.',
+                'permiso.0.archivo.max'   => 'El permiso no puede superar los 2 MB.',
 
-                'seguro.0.archivo.required' => 'Debe adjuntar el seguro obligatorio.',
-                'seguro.0.archivo.file'     => 'El seguro no corresponde a un archivo válido.',
-                'seguro.0.archivo.mimes'    => 'El seguro debe ser PDF, DOC o DOCX.',
-                'seguro.0.archivo.max'      => 'El seguro no puede superar los 2 MB.',
+                'seguro.0.archivo.file'   => 'El seguro no corresponde a un archivo válido.',
+                'seguro.0.archivo.mimes'  => 'El seguro debe ser PDF, DOC o DOCX.',
+                'seguro.0.archivo.max'    => 'El seguro no puede superar los 2 MB.',
             ]);
 
             $permisoPath = null;
@@ -343,6 +341,7 @@ class ParqueVehicularController extends BaseController
         DB::beginTransaction();
 
         try {
+
             /*
             |--------------------------------------------------------------------------
             | VALIDACIÓN
@@ -352,33 +351,50 @@ class ParqueVehicularController extends BaseController
                 'predio' => 'required|integer',
                 'tipo_vehicular' => 'required|integer',
                 'ppu' => 'required|string|max:50',
+                'sigla_institucional' => 'nullable|string|max:255',
                 'marca' => 'nullable|string|max:100',
                 'modelo' => 'nullable|string|max:100',
                 'anio' => 'nullable|string|max:10',
                 'fecha_adquisicion' => 'nullable|date',
+                'fondo_adquisicion' => 'nullable|string|max:255',
+                'vencimiento_permiso' => 'nullable|date',
+                'vencimiento_seguro' => 'nullable|date',
+                'ultima_mantencion' => 'nullable|date',
                 'condicion' => 'nullable|string|max:100',
 
-                'permiso.0.archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-                'seguro.0.archivo' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-            ]);
+                'permiso.*.archivo' => [
+                    'nullable',
+                    'file',
+                    'mimes:pdf,jpg,jpeg,png',
+                    'max:5120',
+                ],
 
+                'seguro.*.archivo' => [
+                    'nullable',
+                    'file',
+                    'mimes:pdf,jpg,jpeg,png',
+                    'max:5120',
+                ],
+            ]);
 
             /*
             |--------------------------------------------------------------------------
             | BUSCAR VEHÍCULO ANTERIOR
             |--------------------------------------------------------------------------
             */
-            $registroAnterior =  DB::table('parque_vehicular as v')
-                        ->leftJoin('predio as p', 'v.predio', '=', 'p.id')
-                        ->select(
-                            'v.*',
-                            'p.nombre as predio_nombre'
-                        );
+            $registroAnterior = DB::table('parque_vehicular as v')
+                ->leftJoin('predio as p', 'v.predio', '=', 'p.id')
+                ->select(
+                    'v.*',
+                    'p.nombre as predio_nombre'
+                );
+
             if (is_numeric($uuid)) {
                 $registroAnterior->where('v.orden', $uuid);
             } else {
                 $registroAnterior->where('v.uuid', $uuid);
-            }          
+            }
+
             $registroAnterior = $registroAnterior->first();
 
             if (!$registroAnterior) {
@@ -386,6 +402,7 @@ class ParqueVehicularController extends BaseController
                     'message' => 'Registro no encontrado'
                 ], 404);
             }
+
             /*
             |--------------------------------------------------------------------------
             | ARCHIVOS ACTUALES
@@ -395,7 +412,7 @@ class ParqueVehicularController extends BaseController
             $nuevoSeguro  = $registroAnterior->seguro_obligatorio_img;
 
             $archivoPermisoAnterior = null;
-            $archivoSeguroAnterior  = null;
+            $archivoSeguroAnterior = null;
 
             /*
             |--------------------------------------------------------------------------
@@ -405,6 +422,7 @@ class ParqueVehicularController extends BaseController
             if ($request->hasFile('permiso.0.archivo')) {
 
                 $archivo = $request->file('permiso.0.archivo');
+
                 $nombreArchivo = 'permiso_' .
                     strtoupper($request->ppu) .
                     '_' .
@@ -429,6 +447,7 @@ class ParqueVehicularController extends BaseController
             if ($request->hasFile('seguro.0.archivo')) {
 
                 $archivo = $request->file('seguro.0.archivo');
+
                 $nombreArchivo = 'seguro_' .
                     strtoupper($request->ppu) .
                     '_' .
@@ -450,40 +469,48 @@ class ParqueVehicularController extends BaseController
             | ACTUALIZAR VEHÍCULO
             |--------------------------------------------------------------------------
             */
-            DB::table('parque_vehicular')
-                ->where('uuid', $uuid)
-                ->update([
+            $vehiculo = DB::table('parque_vehicular');
 
-                    'predio' => (int)$request->predio,
-                    'tipo_vehicular_id' => (int)$request->tipo_vehicular,
-                    'ppu' => strtoupper($request->ppu),
-                    'sigla_institucional' =>  $request->sigla_institucional,
-                    'marca' =>  $request->marca,
-                    'modelo' => $request->modelo,
-                    'anio' =>  $request->anio,
-                    'fecha_adquisicion' => $request->fecha_adquisicion,
-                    'fondo_adquisicion' => $request->fondo_adquisicion,
-                    'vencimiento_permiso_circulacion' =>  $request->vencimiento_permiso,
-                    'vencimiento_seguro_obligatorio' =>  $request->vencimiento_seguro,
-                    'ultima_mantencion' => $request->ultima_mantencion,
-                    'permiso_circulacion_img' => $nuevoPermiso,
-                    'seguro_obligatorio_img' =>  $nuevoSeguro,
-                    'condicion' =>  $request->condicion,
-                    'updated_at' => now()
-                ]);
+            if (is_numeric($uuid)) {
+                $vehiculo->where('orden', $uuid);
+            } else {
+                $vehiculo->where('uuid', $uuid);
+            }
+
+            $vehiculo->update([
+                'predio' => (int) $request->predio,
+                'tipo_vehicular_id' => (int) $request->tipo_vehicular,
+                'ppu' => strtoupper($request->ppu),
+                'sigla_institucional' => $request->sigla_institucional,
+                'marca' => $request->marca,
+                'modelo' => $request->modelo,
+                'anio' => $request->anio,
+                'fecha_adquisicion' => $request->fecha_adquisicion,
+                'fondo_adquisicion' => $request->fondo_adquisicion,
+                'vencimiento_permiso_circulacion' => $request->vencimiento_permiso,
+                'vencimiento_seguro_obligatorio' => $request->vencimiento_seguro,
+                'ultima_mantencion' => $request->ultima_mantencion,
+                'permiso_circulacion_img' => $nuevoPermiso,
+                'seguro_obligatorio_img' => $nuevoSeguro,
+                'condicion' => $request->condicion,
+                'updated_at' => now()
+            ]);
+
             /*
             |--------------------------------------------------------------------------
             | ELIMINAR ARCHIVOS ANTIGUOS
             |--------------------------------------------------------------------------
             */
-            if ($archivoPermisoAnterior &&
+            if (
+                $archivoPermisoAnterior &&
                 $archivoPermisoAnterior != $nuevoPermiso &&
                 Storage::disk('public')->exists($archivoPermisoAnterior)
             ) {
                 Storage::disk('public')->delete($archivoPermisoAnterior);
             }
 
-            if ($archivoSeguroAnterior &&
+            if (
+                $archivoSeguroAnterior &&
                 $archivoSeguroAnterior != $nuevoSeguro &&
                 Storage::disk('public')->exists($archivoSeguroAnterior)
             ) {
@@ -495,14 +522,15 @@ class ParqueVehicularController extends BaseController
             | REGISTRO DESPUÉS
             |--------------------------------------------------------------------------
             */
-            $registroDespues =  DB::table('parque_vehicular as v')
-                    ->leftJoin('predio as p', 'v.predio', '=', 'p.id')
-                    ->select(
-                        'v.*',
-                        'p.nombre as predio_nombre'
-                    )
-                    ->where('v.orden', $registroAnterior->orden)
-                    ->first();
+            $registroDespues = DB::table('parque_vehicular as v')
+                ->leftJoin('predio as p', 'v.predio', '=', 'p.id')
+                ->select(
+                    'v.*',
+                    'p.nombre as predio_nombre'
+                )
+                ->where('v.orden', $registroAnterior->orden)
+                ->first();
+
             /*
             |--------------------------------------------------------------------------
             | AUDITORÍA
@@ -526,11 +554,13 @@ class ParqueVehicularController extends BaseController
             ]);
 
         } catch (\Throwable $e) {
+
             DB::rollBack();
+
             return response()->json([
                 'ok' => false,
                 'message' => $e->getMessage()
-            ],500);
+            ], 500);
         }
     }
 }
