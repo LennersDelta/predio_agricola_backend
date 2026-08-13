@@ -11,20 +11,58 @@ class ContratosEfectuadosController extends BaseController
 {
     public function getListaContratos(Request $request)
     {
-        $query = DB::table('contratos as c')
-            ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
-            ->leftJoin('estados as e', 'c.renta_id', '=', 'e.id')
+        try {
 
-            ->select(
-                'c.*',
-                'p.nombre as predio_nombre',
-                'e.nombre as renta_nombre'
-            )
+            $usuarioActual = auth()->user();
 
-            ->orderBy('c.orden', 'desc');
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
 
-        return response()->json($query->get());
-    }    
+            $query = DB::table('contratos as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->leftJoin('estados as e', 'c.renta_id', '=', 'e.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre',
+                    'e.nombre as renta_nombre'
+                );
+
+            // Administrador y Super Administrador pueden ver todos los contratos
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven contratos de su predio
+                $query->where(
+                    'c.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $contratos = $query
+                ->orderBy('c.orden', 'desc')
+                ->get();
+
+            return response()->json($contratos);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar los contratos.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     
     public function insertar(Request $request)
     {

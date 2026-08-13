@@ -11,35 +11,73 @@ class InsumosServiciosController extends BaseController
 {
     public function getListaInsumosProductos(Request $request)
     {
-        $query = DB::table('insumosproductos as ip')
-            ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
+        try {
 
-            ->leftJoin('estados as tc', function($join) {
-                $join->on('ip.tipo_compra', '=', 'tc.id')
-                     ->where('tc.tipo', 'tipoCompra');
-            })
+            $usuarioActual = auth()->user();
 
-            ->leftJoin('estados as eo', function($join) {
-                $join->on('ip.estado_orden', '=', 'eo.id')
-                     ->where('eo.tipo', 'estadoOC');
-            })
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
 
-            ->leftJoin('estados as ef', function($join) {
-                $join->on('ip.estado_factura', '=', 'ef.id')
-                     ->where('ef.tipo', 'estadoFactura');
-            })
+            $query = DB::table('insumosproductos as ip')
+                ->leftJoin('predio as p', 'ip.predio', '=', 'p.id')
 
-            ->select(
-                'ip.*', // incluye uuid automáticamente
-                'p.nombre as predio_nombre',
-                'tc.nombre as tipo_compra_nombre',
-                'eo.nombre as estado_orden_nombre',
-                'ef.nombre as estado_factura_nombre'
-            )
+                ->leftJoin('estados as tc', function ($join) {
+                    $join->on('ip.tipo_compra', '=', 'tc.id')
+                        ->where('tc.tipo', 'tipoCompra');
+                })
 
-            ->orderBy('ip.orden', 'desc');
+                ->leftJoin('estados as eo', function ($join) {
+                    $join->on('ip.estado_orden', '=', 'eo.id')
+                        ->where('eo.tipo', 'estadoOC');
+                })
 
-        return response()->json($query->get());
+                ->leftJoin('estados as ef', function ($join) {
+                    $join->on('ip.estado_factura', '=', 'ef.id')
+                        ->where('ef.tipo', 'estadoFactura');
+                })
+
+                ->select(
+                    'ip.*',
+                    'p.nombre as predio_nombre',
+                    'tc.nombre as tipo_compra_nombre',
+                    'eo.nombre as estado_orden_nombre',
+                    'ef.nombre as estado_factura_nombre'
+                );
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // El usuario debe tener un predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven los registros de su predio
+                $query->where(
+                    'ip.predio',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $insumosProductos = $query
+                ->orderBy('ip.orden', 'desc')
+                ->get();
+
+            return response()->json($insumosProductos);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al cargar los insumos y productos.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function eliminarInsumosProductos($numeroOrden)

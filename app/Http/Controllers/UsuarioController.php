@@ -15,16 +15,57 @@ use Illuminate\Support\Facades\DB;
 class UsuarioController extends BaseController
 {
     // ── GET /api/usuarios ────────────────────────────────────────────────────
-    public function index(): AnonymousResourceCollection
+    /*public function index(): AnonymousResourceCollection
     {
         $usuarios = User::with([
             'roles',
             'grado',
             'contratacion',
+            'predio',
         ])
         ->orderBy('apellido_ap')
         ->orderBy('apellido_mat')
         ->get();
+
+        return UserResource::collection($usuarios);
+    }*/
+
+    public function index(): AnonymousResourceCollection
+    {
+        $usuarioActual = auth()->user();
+
+        if (!$usuarioActual) {
+            abort(response()->json([
+                'message' => 'Usuario no autenticado.'
+            ], 401));
+        }
+
+        $query = User::with([
+            'roles',
+            'grado',
+            'contratacion',
+            'predio',
+        ]);
+
+        if (!$usuarioActual->puedeAdministrarTodosLosPredios()) {
+
+            if (!$usuarioActual->predio_id) {
+                abort(response()->json([
+                    'message' => 'El usuario no tiene un predio asociado.'
+                ], 403));
+            }
+
+            $query->where(
+                'predio_id',
+                $usuarioActual->predio_id
+            );
+        }
+
+        $usuarios = $query
+            ->orderBy('apellido_ap')
+            ->orderBy('apellido_mat')
+            ->orderBy('name')
+            ->get();
 
         return UserResource::collection($usuarios);
     }
@@ -32,35 +73,50 @@ class UsuarioController extends BaseController
     // ── POST /api/usuarios ───────────────────────────────────────────────────
     public function store(Request $request): JsonResponse
     {
+        $usuarioActual = auth()->user();
+
+        if (!$usuarioActual) {
+            return response()->json([
+                'message' => 'Usuario no autenticado.'
+            ], 401);
+        }
+
+        $data = $request->validate([
+            'rut'               => ['required', 'string', 'max:12', 'unique:users,rut'],
+            'name'              => ['required', 'string', 'max:100'],
+            'apellido_ap'       => ['required', 'string', 'max:100'],
+            'apellido_mat'      => ['nullable', 'string', 'max:100'],
+            'email'             => ['nullable', 'email', 'max:255', 'unique:users,email'],
+            'grado_id'          => ['nullable', 'string', 'max:100'],
+            'tipo_contratacion' => ['nullable', 'string', 'max:30'],
+            'telefono'          => ['nullable', 'string', 'max:15'],
+            'area_id'           => ['nullable', 'integer'],
+            'predio_id'         => ['required', 'integer', 'exists:predio,id'],
+            'role'              => ['required', 'string', 'exists:roles,name'],
+            'password'          => ['required', 'confirmed', Password::min(8)],
+        ], [
+            'rut.required'          => 'El RUT es obligatorio.',
+            'rut.unique'            => 'Este RUT ya está registrado en el sistema.',
+            'name.required'         => 'El nombre es obligatorio.',
+            'apellido_ap.required'  => 'El apellido paterno es obligatorio.',
+            'email.email'           => 'El correo ingresado no es válido.',
+            'email.unique'          => 'Este correo ya está registrado.',
+            'predio_id.required'    => 'Debe seleccionar un predio.',
+            'predio_id.integer'     => 'El predio seleccionado no es válido.',
+            'predio_id.exists'      => 'El predio seleccionado no existe.',
+            'role.required'         => 'Debe asignar un rol al usuario.',
+            'role.exists'           => 'El rol seleccionado no es válido.',
+            'password.required'     => 'La contraseña es obligatoria.',
+            'password.confirmed'    => 'Las contraseñas no coinciden.',
+            'password.min'          => 'La contraseña debe tener al menos 8 caracteres.',
+        ]);
+
+        $this->validarPredioSolicitado($data['predio_id']);
+        $this->validarRolSolicitado($data['role']);
+
         DB::beginTransaction();
 
         try {
-
-            $data = $request->validate([
-                'rut'               => ['required', 'string', 'max:12', 'unique:users,rut'],
-                'name'              => ['required', 'string', 'max:100'],
-                'apellido_ap'       => ['required', 'string', 'max:100'],
-                'apellido_mat'      => ['nullable', 'string', 'max:100'],
-                'email'             => ['nullable', 'email', 'max:255', 'unique:users,email'],
-                'grado_id'          => ['nullable', 'string', 'max:100'],
-                'tipo_contratacion' => ['nullable', 'string', 'max:30'],
-                'telefono'          => ['nullable', 'string', 'max:15'],
-                'area_id'           => ['nullable', 'integer'],
-                'role'              => ['required', 'string', 'exists:roles,name'],
-                'password'          => ['required', 'confirmed', Password::min(8)],
-            ], [
-                'rut.required'          => 'El RUT es obligatorio.',
-                'rut.unique'            => 'Este RUT ya está registrado en el sistema.',
-                'name.required'         => 'El nombre es obligatorio.',
-                'apellido_ap.required'  => 'El apellido paterno es obligatorio.',
-                'email.email'           => 'El correo ingresado no es válido.',
-                'email.unique'          => 'Este correo ya está registrado.',
-                'role.required'         => 'Debe asignar un rol al usuario.',
-                'role.in'               => 'El rol seleccionado no es válido.',
-                'password.required'     => 'La contraseña es obligatoria.',
-                'password.confirmed'    => 'Las contraseñas no coinciden.',
-                'password.min'          => 'La contraseña debe tener al menos 8 caracteres.',
-            ]);
 
             $usuario = User::create([
                 'rut'               => $data['rut'],
@@ -72,22 +128,29 @@ class UsuarioController extends BaseController
                 'tipo_contratacion' => $data['tipo_contratacion'] ?? null,
                 'telefono'          => $data['telefono'] ?? null,
                 'area_id'           => $data['area_id'] ?? null,
+                'predio_id'         => $data['predio_id'],
                 'password'          => Hash::make($data['password']),
             ]);
 
             $usuario->assignRole($data['role']);
 
-            // Obtener registro para auditoría
             $registro = DB::table('users')
                 ->where('id', $usuario->id)
                 ->first();
 
             if (!$registro) {
-                throw new \Exception('No fue posible recuperar el usuario creado.');
+                throw new \Exception(
+                    'No fue posible recuperar el usuario creado.'
+                );
             }
 
-            // Agregar el rol al objeto auditado
-            $registro->rol = $data['role'];
+            $registro->role = $data['role'];
+
+            /*
+            * ========================================================
+            * AUDITORÍA
+            * ========================================================
+            */
 
             $this->auditar(
                 modulo: 'Usuarios',
@@ -99,17 +162,23 @@ class UsuarioController extends BaseController
             );
 
             DB::commit();
-
             return response()->json([
                 'message' => 'Usuario creado correctamente.',
-                'data'    => new UserResource($usuario->load('roles')),
+                'data'    => new UserResource(
+                    $usuario->load([
+                        'roles',
+                        'grado',
+                        'contratacion',
+                        'predio',
+                    ])
+                ),
             ], 201);
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
+
+        } catch (\Throwable $e) {
+
             DB::rollBack();
-            throw $e;
-        } catch (\Exception $e) {
-            DB::rollBack();
+
             return response()->json([
                 'message' => 'Error al crear el usuario.',
                 'error'   => $e->getMessage(),
@@ -124,75 +193,179 @@ class UsuarioController extends BaseController
     }*/
     public function show(User $usuario): UserResource
     {
+        $this->validarAccesoPredio($usuario->predio_id);
         return new UserResource(
             $usuario->load([
                 'roles',
                 'grado',
-                'contratacion'
+                'contratacion',
+                'predio',
             ])
         );
     }
 
     // ── PUT /api/usuarios/{id} ───────────────────────────────────────────────
+
     public function update(Request $request, User $usuario): JsonResponse
     {
+        $this->validarAccesoPredio($usuario->predio_id);
         $data = $request->validate([
-            'name'               => ['required', 'string', 'max:100'],
-            'apellido_ap'        => ['required', 'string', 'max:100'],
-            'apellido_mat'       => ['nullable', 'string', 'max:100'],
-            'email'              => ['nullable', 'email', 'max:255', "unique:users,email,{$usuario->id}"],
-            'grado_id'           => ['nullable', 'string', 'max:100'],
-            'tipo_contratacion'  => ['nullable', 'string', 'max:30'],
-            'telefono'           => ['nullable', 'string', 'max:15'],
-            'area_id'            => ['nullable', 'integer'],
-            'role'               => ['required', 'string', 'exists:roles,name'],
-            'password'           => ['nullable', 'confirmed', Password::min(8)],
+
+            'name' => ['required', 'string', 'max:100', ],
+            'apellido_ap' => ['required','string','max:100',],
+
+            'apellido_mat' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'email' => [
+                'nullable',
+                'email',
+                'max:255',
+                "unique:users,email,{$usuario->id}",
+            ],
+
+            'grado_id' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'tipo_contratacion' => [
+                'nullable',
+                'string',
+                'max:30',
+            ],
+
+            'telefono' => [
+                'nullable',
+                'string',
+                'max:15',
+            ],
+
+            'area_id' => [
+                'nullable',
+                'integer',
+            ],
+
+            'predio_id' => [
+                'required',
+                'integer',
+                'exists:predio,id',
+            ],
+
+            'role' => [
+                'required',
+                'string',
+                'exists:roles,name',
+            ],
+
+            'password' => [
+                'nullable',
+                'confirmed',
+                Password::min(8),
+            ],
+
         ], [
-            'name.required'         => 'El nombre es obligatorio.',
-            'apellido_ap.required'  => 'El apellido paterno es obligatorio.',
-            'email.email'           => 'El correo ingresado no es válido.',
-            'email.unique'          => 'Este correo ya está registrado por otro usuario.',
-            'role.required'         => 'Debe asignar un rol al usuario.',
-            'password.confirmed'    => 'Las contraseñas no coinciden.',
-            'password.min'          => 'La contraseña debe tener al menos 8 caracteres.',
+
+            'name.required' => 'El nombre es obligatorio.',
+            'apellido_ap.required' => 'El apellido paterno es obligatorio.',
+            'email.email' => 'El correo ingresado no es válido.',
+            'email.unique' => 'Este correo ya está registrado por otro usuario.',
+            'predio_id.required' => 'Debe seleccionar un predio.',
+            'predio_id.integer' => 'El predio seleccionado no es válido.',
+            'predio_id.exists' => 'El predio seleccionado no existe.',
+            'role.required' => 'Debe asignar un rol al usuario.',
+            'role.exists' => 'El rol seleccionado no es válido.',
+            'password.confirmed' => 'Las contraseñas no coinciden.',
+            'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
         ]);
+
+        $this->validarPredioSolicitado(
+            $data['predio_id']
+        );
+
+        $this->validarRolSolicitado(
+            $data['role']
+        );
 
         DB::beginTransaction();
 
         try {
 
-            // Estado anterior
+            /*
+            * ========================================================
+            * ESTADO ANTERIOR
+            * ========================================================
+            */
             $antes = DB::table('users')
                 ->where('id', $usuario->id)
                 ->first();
 
-            $usuario->update([
-                'name'              => $data['name'],
-                'apellido_ap'       => $data['apellido_ap'],
-                'apellido_mat'      => $data['apellido_mat'] ?? null,
-                'email'             => $data['email'] ?? null,
-                'grado_id'          => $data['grado_id'] ?? null,
-                'tipo_contratacion' => $data['tipo_contratacion'] ?? null,
-                'telefono'          => $data['telefono'] ?? null,
-                'area_id'           => $data['area_id'] ?? null,
+            /*
+            * Agregar el rol anterior a la auditoría.
+            */
+            $rolAnterior = $usuario->roles()
+                ->pluck('name')
+                ->first();
 
-                ...( ! empty($data['password'])
-                    ? ['password' => Hash::make($data['password'])]
-                    : []
+            if ($antes) {
+                $antes->role = $rolAnterior;            
+            }
+
+
+            /*
+            * ========================================================
+            * ACTUALIZAR USUARIO
+            * ========================================================
+            */
+            $usuario->update([
+
+                'name' => $data['name'],
+                'apellido_ap' => $data['apellido_ap'],
+                'apellido_mat' => $data['apellido_mat'] ?? null,
+                'email' => $data['email'] ?? null,
+                'grado_id' => $data['grado_id'] ?? null,
+                'tipo_contratacion' => $data['tipo_contratacion'] ?? null,
+                'telefono' =>  $data['telefono'] ?? null,
+                'area_id' => $data['area_id'] ?? null,
+                'predio_id' => $data['predio_id'],
+                ...(
+                    !empty($data['password'])
+                        ? [
+                            'password' => Hash::make(
+                                $data['password']
+                            ),
+                        ]
+                        : []
                 ),
             ]);
 
-            // Actualizar rol
-            $usuario->syncRoles([$data['role']]);
-
-            // Estado posterior
+            $usuario->syncRoles([
+                $data['role']
+            ]);
+            /*
+            * ========================================================
+            * ESTADO POSTERIOR
+            * ========================================================
+            */
             $despues = DB::table('users')
                 ->where('id', $usuario->id)
                 ->first();
+            /*
+            * Agregar rol nuevo a la auditoría.
+            */
+            if ($despues) {
+                $despues->role = $data['role'];
+            }
 
-            // Agregar el rol para que quede registrado en la auditoría
-            $despues->role = $data['role'];
-
+            /*
+            * ========================================================
+            * AUDITORÍA
+            * ========================================================
+            */
             $this->auditar(
                 modulo: 'Usuarios',
                 accion: 'ACTUALIZAR',
@@ -202,21 +375,24 @@ class UsuarioController extends BaseController
                 antes: $antes,
                 despues: $despues
             );
-
             DB::commit();
 
             return response()->json([
                 'message' => 'Usuario actualizado correctamente.',
-                'data'    => new UserResource($usuario->load('roles')),
+                'data' => new UserResource(
+                    $usuario->load([
+                        'roles',
+                        'grado',
+                        'contratacion',
+                        'predio',
+                    ])
+                ),
             ]);
-
         } catch (\Throwable $e) {
-
             DB::rollBack();
-
             return response()->json([
                 'message' => 'Error al actualizar el usuario.',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -225,6 +401,8 @@ class UsuarioController extends BaseController
     public function destroy(User $usuario): JsonResponse
     {
         // Prevenir auto-eliminación
+        $this->validarAccesoPredio($usuario->predio_id);
+
         if ($usuario->id === auth()->id()) {
             return response()->json([
                 'message' => 'No puedes eliminar tu propia cuenta.',

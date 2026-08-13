@@ -24,7 +24,7 @@ class EstadosController extends Controller
         }
     }
 
-    public function getListaPredio()
+    /*public function getListaPredio()
     {
         try {
             return response()->json(
@@ -38,7 +38,46 @@ class EstadosController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }*/
+    public function getListaPredio()
+    {
+        try {
+
+            $usuarioActual = auth()->user();
+            $query = DB::table('predio')
+                ->where('estado', true);
+
+            /*
+            * ADMINISTRADOR
+            * Puede ver todos los predios activos.
+            */
+            if ($usuarioActual->hasRole('administrador')) {
+                $query->orderBy('nombre');
+
+            } else {
+                /*
+                * USUARIO NORMAL
+                * Solamente puede recibir su propio predio.
+                */
+                $query->where('id', $usuarioActual->predio_id)
+                    ->orderBy('nombre');
+            }
+
+            return response()->json(
+                $query->get([
+                    'id',
+                    'nombre'
+                ])
+            );
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al cargar los predios.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
+    
+
 
     public function getListaTipoVehiculos()
     {

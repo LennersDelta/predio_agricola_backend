@@ -13,15 +13,55 @@ class AnticipoRendirCuentaController extends BaseController
 {
     public function getListaAnticipoRendirCuenta(Request $request)
     {
-        $query = DB::table('anticipo_rendir_cuenta as c')
-            ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
-            ->select(
-                'c.*',
-                'p.nombre as predio_nombre'
-            )
-            ->orderBy('c.orden', 'desc');
+        try {
 
-        return response()->json($query->get());
+            $usuarioActual = auth()->user();
+
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('anticipo_rendir_cuenta as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                );
+
+            // Administrador y Super Administrador pueden ver todos los registros
+            if (!$usuarioActual->hasAnyRole([
+                'administrador',
+                'super_administrador'
+            ])) {
+
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Los demás usuarios solo ven registros de su predio
+                $query->where(
+                    'c.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $registros = $query
+                ->orderBy('c.orden', 'desc')
+                ->get();
+
+            return response()->json($registros);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar los anticipos a rendir cuenta.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insert(Request $request)

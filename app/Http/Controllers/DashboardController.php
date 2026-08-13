@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index(): JsonResponse
+    /*public function index(): JsonResponse
     {
         try {
 
@@ -122,7 +122,215 @@ class DashboardController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
-    }
+    }*/
+
+    public function index(): JsonResponse
+    {
+        try {
+
+            $usuarioActual = auth()->user();
+
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+  
+            /* PERMISOS */          
+            $esAdministrador = $usuarioActual->hasAnyRole([
+                'administrador',
+                'super_administrador'
+            ]);
+
+            if (!$esAdministrador && !$usuarioActual->predio_id) {
+                return response()->json([
+                    'message' => 'El usuario no tiene un predio asociado.'
+                ], 403);
+            }
+            $predioId = $usuarioActual->predio_id;
+
+            /* PREDIOS */
+            $queryPredios = DB::table('predio');
+
+            if (!$esAdministrador) {
+                $queryPredios->where('id', $predioId);
+            }
+            $totalPredio = $queryPredios->count();
+
+            /* VEHÍCULOS */
+            $queryVehiculos = DB::table('parque_vehicular');
+
+            if (!$esAdministrador) {
+                $queryVehiculos->where('predio', $predioId);
+            }
+            $totalVehiculos = $queryVehiculos->count();
+
+            /* VEHÍCULOS POR PREDIO */
+            $porPredio = DB::table('parque_vehicular as pv')
+                ->join('predio as p', 'p.id', '=', 'pv.predio')
+                ->select(
+                    'p.id',
+                    'p.nombre',
+                    DB::raw('COUNT(pv.orden) as total')
+                )
+                ->when(
+                    !$esAdministrador,
+                    function ($query) use ($predioId) {
+                        $query->where('pv.predio', $predioId);
+                    }
+                )
+                ->groupBy('p.id', 'p.nombre')
+                ->orderByDesc('total')
+                ->get();
+
+            /* VEHÍCULOS POR TIPO */
+            $porTipo = DB::table('parque_vehicular as pv')
+                ->join(
+                    'tipo_vehiculo as tv',
+                    'tv.id',
+                    '=',
+                    'pv.tipo_vehicular_id'
+                )
+                ->select(
+                    'tv.id',
+                    'tv.nombre',
+                    DB::raw('COUNT(pv.orden) as total')
+                )
+                ->when(
+                    !$esAdministrador,
+                    function ($query) use ($predioId) {
+                        $query->where('pv.predio', $predioId);
+                    }
+                )
+                ->groupBy('tv.id', 'tv.nombre')
+                ->orderByDesc('total')
+                ->get();
+
+            /* ÚLTIMOS VEHÍCULOS */
+            $ultimosVehiculos = DB::table('parque_vehicular as pv')
+                ->join('predio as p', 'p.id', '=', 'pv.predio')
+                ->join(
+                    'tipo_vehiculo as tv',
+                    'tv.id',
+                    '=',
+                    'pv.tipo_vehicular_id'
+                )
+                ->select(
+                    'pv.orden',
+                    'pv.ppu',
+                    'pv.marca',
+                    'pv.modelo',
+                    'pv.anio',
+                    'p.nombre as predio',
+                    'tv.nombre as tipo',
+                    'pv.created_at'
+                )
+                ->when(
+                    !$esAdministrador,
+                    function ($query) use ($predioId) {
+                        $query->where('pv.predio', $predioId);
+                    }
+                )
+                ->orderByDesc('pv.created_at')
+                ->limit(5)
+                ->get();
+
+            /* RRHH */
+            $queryFuncionarios = DB::table('recursos_humanos');
+
+            if (!$esAdministrador) {
+                $queryFuncionarios->where('predio_id', $predioId);
+            }
+
+            $totalFuncionarios = $queryFuncionarios->count();
+
+
+            /* FUNCIONARIOS POR PREDIO */
+            $funcionariosPorPredio = DB::table('recursos_humanos as rh')
+                ->join(
+                    'predio as p',
+                    'p.id',
+                    '=',
+                    'rh.predio_id'
+                )
+                ->select(
+                    'p.id',
+                    'p.nombre',
+                    DB::raw('COUNT(rh.orden) as total')
+                )
+                ->when(
+                    !$esAdministrador,
+                    function ($query) use ($predioId) {
+                        $query->where('rh.predio_id', $predioId);
+                    }
+                )
+                ->groupBy('p.id', 'p.nombre')
+                ->orderByDesc('total')
+                ->get();
+
+            /* INSUMOS Y PRODUCTOS */
+            $insumosproductos = DB::table('insumosproductos as ip')
+                ->join(
+                    'predio as p',
+                    'p.id',
+                    '=',
+                    'ip.predio'
+                )
+                ->select(
+                    'ip.predio',
+                    'p.nombre',
+
+                    DB::raw("
+                        COALESCE(
+                            CAST(SUM(ip.valor_total) AS BIGINT),
+                            0
+                        ) as total_por_predio
+                    "),
+
+                    DB::raw("
+                        COALESCE(
+                            CAST(SUM(ip.valor_cotizacion) AS BIGINT),
+                            0
+                        ) as total_cotizacion_por_predio
+                    ")
+                )
+                ->when(
+                    !$esAdministrador,
+                    function ($query) use ($predioId) {
+                        $query->where('ip.predio', $predioId);
+                    }
+                )
+                ->groupBy('ip.predio', 'p.nombre')
+                ->orderBy('p.nombre')
+                ->get();
+
+            return response()->json([
+
+                // VEHÍCULOS
+                'totalVehiculos'    => $totalVehiculos,
+                'porPredio'         => $porPredio,
+                'porTipo'           => $porTipo,
+                'ultimosVehiculos'  => $ultimosVehiculos,
+
+                // PREDIOS
+                'totalPredio'       => $totalPredio,
+
+                // RRHH
+                'totalFuncionarios' => $totalFuncionarios,
+                'funcionariosPorPredio' => $funcionariosPorPredio,
+
+                // INSUMOS Y PRODUCTOS
+                'insumosproductos' => $insumosproductos,
+
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al cargar dashboard',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }    
 
     public function vehiculosPorPredio($id)
     {
@@ -191,15 +399,12 @@ class DashboardController extends Controller
                 )
 
                 ->where('rh.predio_id', $id)
-
                 ->orderBy('rh.nombres_apellidos', 'asc')
-
                 ->get();
 
             return response()->json($personal);
 
         } catch (\Throwable $e) {
-
             return response()->json([
                 'message' => 'Error RRHH',
                 'error'   => $e->getMessage(),

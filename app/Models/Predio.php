@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class Predio extends Model
 {
@@ -13,6 +14,11 @@ class Predio extends Model
         'fechacreacion',
         'estado',
     ];
-
+    
     public $timestamps = false;
+
+    public function usuarios()
+    {
+        return $this->hasMany(User::class, 'predio_id', 'id');
+    }
 }
