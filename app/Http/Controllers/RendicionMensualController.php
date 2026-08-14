@@ -13,6 +13,8 @@ class RendicionMensualController extends BaseController
 {
     public function getListaRendicionMensual(Request $request)
     {
+        $usuarioActual = auth()->user();
+
         $query = DB::table('rendicion_mensual as c')
             ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
             ->select(
@@ -20,6 +22,15 @@ class RendicionMensualController extends BaseController
                 'p.nombre as predio_nombre'
             )
             ->orderBy('c.orden', 'desc');
+
+        // Administrador y Super Administrador ven todos
+        if (
+            !$usuarioActual->hasRole('administrador') &&
+            !$usuarioActual->hasRole('super_administrador')
+        ) {
+            // Usuario normal: solamente su predio
+            $query->where('c.predio_id', $usuarioActual->predio_id);
+        }
 
         return response()->json($query->get());
     }

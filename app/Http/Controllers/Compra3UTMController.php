@@ -13,17 +13,59 @@ class Compra3UTMController extends BaseController
 {
     public function getListaCompra3UTM(Request $request)
     {
-        $query = DB::table('compra_utm as c')
-            ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
-            ->leftJoin('estados as e', 'c.estado_id', '=', 'e.id')
+        try {
 
-            ->select(
-                'c.*',
-                'p.nombre as predio_nombre',
-                'e.nombre as estado_nombre'
-            )
-            ->orderBy('c.orden', 'desc');
-        return response()->json($query->get());
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('compra_utm as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->leftJoin('estados as e', 'c.estado_id', '=', 'e.id')
+
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre',
+                    'e.nombre as estado_nombre'
+                );
+
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven los registros de su predio
+                $query->where(
+                    'c.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $compraUTM = $query
+                ->orderBy('c.orden', 'desc')
+                ->get();
+
+            return response()->json($compraUTM);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar las compras UTM.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insert(Request $request)
