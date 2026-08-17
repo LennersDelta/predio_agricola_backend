@@ -13,31 +13,73 @@ class RecursosHumanoController extends BaseController
 {
     public function getListaRecursosHumanos(Request $request)
     {
-         
+        try {
+
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
             $query = DB::table('recursos_humanos as rh')
-                    ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
-                    ->leftJoin('grados as g', 'rh.grado_id', '=', 'g.id')
-                    ->leftJoin('tipo_contrato as tc', 'rh.tipo_contrato_id', '=', 'tc.id') 
+                ->leftJoin('predio as p', 'rh.predio_id', '=', 'p.id')
+                ->leftJoin('grados as g', 'rh.grado_id', '=', 'g.id')
+                ->leftJoin('tipo_contrato as tc', 'rh.tipo_contrato_id', '=', 'tc.id')
+                ->select(
+                    'rh.orden',
+                    'p.nombre as predio',
+                    'rh.nombres_apellidos',
+                    'rh.rut',
+                    'tc.nombre as tipo_contrato',
+                    'g.descripcion as grado',
+                    'rh.cargo_contratado',
+                    'rh.area_funciones as area',
+                    'rh.funcion_actual',
+                    'rh.fecha_inicio_contrato',
+                    'rh.anios_servicio',
+                    'rh.ultima_calificacion',
+                    'rh.capacitado_prevencion_riesgo',
+                    'rh.uuid'
+                );
 
-            ->select(
-                'rh.orden',
-                'p.nombre as predio',
-                'rh.nombres_apellidos',
-                'rh.rut',
-                'tc.nombre as tipo_contrato', 
-                'g.descripcion as grado',
-                'rh.cargo_contratado',
-                'rh.area_funciones as area',
-                'rh.funcion_actual',
-                'rh.fecha_inicio_contrato',
-                'rh.anios_servicio',
-                'rh.ultima_calificacion',
-                'rh.capacitado_prevencion_riesgo',
-                'rh.uuid'
-            )
+            // Administrador y Super Administrador
+            // pueden ver todos los registros
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
 
-            ->orderBy('rh.orden', 'desc');
-        return response()->json($query->get());
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven
+                // los recursos humanos de su predio
+                $query->where(
+                    'rh.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $recursosHumanos = $query
+                ->orderBy('rh.orden', 'desc')
+                ->get();
+
+            return response()->json($recursosHumanos);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar los recursos humanos.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insertar(Request $request)

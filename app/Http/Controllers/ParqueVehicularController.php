@@ -13,19 +13,61 @@ class ParqueVehicularController extends BaseController
 {
     public function getListaParqueVehicular(Request $request)
     {
-        $query = DB::table('parque_vehicular as pv')
-            ->leftJoin('predio as p', 'pv.predio', '=', 'p.id')
-            ->leftJoin('tipo_vehiculo as tv', 'pv.tipo_vehicular_id', '=', 'tv.id')
+        try {
 
-            ->select(
-                'pv.*',
-                'p.nombre as predio_nombre',
-                'tv.nombre as tipo_vehiculo_nombre'
-            )
+            $usuarioActual = auth()->user();
 
-            ->orderBy('pv.orden', 'desc');
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
 
-        return response()->json($query->get());
+            $query = DB::table('parque_vehicular as pv')
+                ->leftJoin('predio as p', 'pv.predio', '=', 'p.id')
+                ->leftJoin('tipo_vehiculo as tv', 'pv.tipo_vehicular_id', '=', 'tv.id')
+                ->select(
+                    'pv.*',
+                    'p.nombre as predio_nombre',
+                    'tv.nombre as tipo_vehiculo_nombre'
+                );
+
+            // Administrador y Super Administrador
+            // pueden ver todos los registros
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven
+                // los vehículos de su predio
+                $query->where(
+                    'pv.predio',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $parqueVehicular = $query
+                ->orderBy('pv.orden', 'desc')
+                ->get();
+
+            return response()->json($parqueVehicular);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar el parque vehicular.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insertar(Request $request)

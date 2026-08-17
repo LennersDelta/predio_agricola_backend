@@ -13,20 +13,63 @@ class BoletaHonorarioController extends BaseController
 {
     public function getListaBoletaHonorario(Request $request)
     {
-        $query = DB::table('boleta_honorario as c')
-            ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
-            ->select(
-                'c.*',
-                'p.nombre as predio_nombre'
-            )
-            ->orderBy('c.orden', 'desc');
+        try {
 
-        return response()->json($query->get());
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('boleta_honorario as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                );
+
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven
+                // los registros de su predio
+                $query->where(
+                    'c.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $boletaHonorario = $query
+                ->orderBy('c.orden', 'desc')
+                ->get();
+
+            return response()->json($boletaHonorario);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'message' => 'Error al cargar las boletas de honorarios.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insert(Request $request)
     {
         try {
+
             $request->validate([
                 'predio_id'        => 'required|integer',
                 'mes'              => 'required|string',
@@ -35,25 +78,44 @@ class BoletaHonorarioController extends BaseController
                 'fecha'            => 'required|date',
                 'doe_informa_ab5'  => 'required|string|max:255',
                 'boleta'           => 'required|string|max:255',
-                'observaciones'    => 'required|string',
+                'observaciones'    => 'nullable|string',
             ]);
 
-            // Validar que no exista una boleta para el mismo predio y mes
-            $existe = DB::table('boleta_honorario')
-                ->where('predio_id', $request->predio_id)
-                ->where('mes', $request->mes)
-                ->exists();
 
-            if ($existe) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Ya existe una boleta de honorario para el predio seleccionado en el mes indicado.'
-                ], 422);
-            }
+            // ============================================================
+            // VALIDACIÓN DE DUPLICADOS
+            // ============================================================
+
+            /*
+            * NO SE VALIDA DUPLICADO POR PREDIO + MES
+            *
+            * Un mismo predio puede tener múltiples boletas de honorarios
+            * durante el mismo mes.
+            *
+            * Ejemplo:
+            *
+            * Predio 2 - Enero
+            *   - Boleta 001
+            *   - Boleta 002
+            *   - Boleta 003
+            *
+            * Por lo tanto, NO se debe utilizar:
+            *
+            * where('predio_id', $request->predio_id)
+            * where('mes', $request->mes)
+            *
+            * para impedir nuevos registros.
+            */
+
 
             DB::beginTransaction();
 
             try {
+
+                // ========================================================
+                // INSERTAR REGISTRO
+                // ========================================================
+
                 $id = DB::table('boleta_honorario')->insertGetId([
                     'predio_id'        => $request->predio_id,
                     'mes'              => $request->mes,
@@ -69,7 +131,10 @@ class BoletaHonorarioController extends BaseController
                 ], 'orden');
 
 
-                // Recuperar registro creado con nombre del predio
+                // ========================================================
+                // RECUPERAR REGISTRO CREADO
+                // ========================================================
+
                 $registro = DB::table('boleta_honorario as b')
                     ->leftJoin('predio as p', 'b.predio_id', '=', 'p.id')
                     ->select(
@@ -80,10 +145,16 @@ class BoletaHonorarioController extends BaseController
                     ->first();
 
                 if (!$registro) {
-                    throw new Exception('No fue posible recuperar el registro creado.');
+                    throw new Exception(
+                        'No fue posible recuperar el registro creado.'
+                    );
                 }
 
-                // Auditoría
+
+                // ========================================================
+                // AUDITORÍA
+                // ========================================================
+
                 $this->auditar(
                     modulo: 'Boleta Honorario',
                     accion: 'CREAR',
@@ -93,19 +164,23 @@ class BoletaHonorarioController extends BaseController
                     despues: $registro
                 );
 
+
+                // ========================================================
+                // COMMIT
+                // ========================================================
+
                 DB::commit();
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Boleta de honorario registrada correctamente.',
-                    'id' => $id
+                    'id'      => $id
                 ], 201);
 
             } catch (\Exception $e) {
                 DB::rollBack();
                 throw $e;
             }
-
         } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
@@ -115,7 +190,6 @@ class BoletaHonorarioController extends BaseController
             ], 422);
 
         } catch (\Exception $e) {
-
             return response()->json([
                 'success' => false,
                 'message' => 'Error al guardar la boleta de honorario.',
@@ -127,7 +201,6 @@ class BoletaHonorarioController extends BaseController
     public function eliminarBoletaHonorario($numeroOrden)
     {
         DB::beginTransaction();
-
         try {
             // Obtener registro antes de eliminar con nombre del predio
             $registro = DB::table('boleta_honorario as b')
@@ -249,7 +322,11 @@ class BoletaHonorarioController extends BaseController
         DB::beginTransaction();
 
         try {
-            // Obtener registro anterior con nombre del predio
+
+            // ============================================================
+            // OBTENER REGISTRO ANTERIOR CON NOMBRE DEL PREDIO
+            // ============================================================
+
             $query = DB::table('boleta_honorario as b')
                 ->leftJoin('predio as p', 'b.predio_id', '=', 'p.id')
                 ->select(
@@ -271,24 +348,37 @@ class BoletaHonorarioController extends BaseController
                 ], 404);
             }
 
-            // Validar duplicado Predio + Mes
-            $duplicado = DB::table('boleta_honorario')
-                ->where('predio_id', $request->predio_id)
-                ->where('mes', $request->mes)
-                ->when(is_numeric($id), function ($q) use ($id) {
-                    $q->where('orden', '<>', $id);
-                }, function ($q) use ($id) {
-                    $q->where('uuid', '<>', $id);
-                })
-                ->exists();
 
-            if ($duplicado) {
-                return response()->json([
-                    'message' => 'Ya existe una boleta de honorario para el predio y mes seleccionados.'
-                ], 422);
-            }
+            // ============================================================
+            // VALIDACIÓN DE DUPLICADOS
+            // ============================================================
 
-            // Actualizar registro
+            /*
+            * NO SE VALIDA DUPLICADO POR PREDIO + MES
+            *
+            * Un mismo predio puede tener múltiples boletas de honorarios
+            * durante el mismo mes.
+            *
+            * Ejemplo:
+            *
+            * Predio 2 - Enero
+            *   - Boleta 001
+            *   - Boleta 002
+            *   - Boleta 003
+            *
+            * Por lo tanto, NO corresponde utilizar:
+            *
+            * where('predio_id', $request->predio_id)
+            * where('mes', $request->mes)
+            *
+            * para determinar si una boleta está duplicada.
+            */
+
+
+            // ============================================================
+            // ACTUALIZAR REGISTRO
+            // ============================================================
+
             $updateQuery = DB::table('boleta_honorario');
 
             if (is_numeric($id)) {
@@ -309,7 +399,11 @@ class BoletaHonorarioController extends BaseController
                 'updated_at'      => now(),
             ]);
 
-            // Obtener registro después de actualizar
+
+            // ============================================================
+            // OBTENER REGISTRO DESPUÉS DE ACTUALIZAR
+            // ============================================================
+
             $registroDespues = DB::table('boleta_honorario as b')
                 ->leftJoin('predio as p', 'b.predio_id', '=', 'p.id')
                 ->select(
@@ -319,7 +413,11 @@ class BoletaHonorarioController extends BaseController
                 ->where('b.orden', $registroAnterior->orden)
                 ->first();
 
-            // Auditoría
+
+            // ============================================================
+            // AUDITORÍA
+            // ============================================================
+
             $this->auditar(
                 modulo: 'Boleta Honorario',
                 accion: 'ACTUALIZAR',
@@ -330,6 +428,11 @@ class BoletaHonorarioController extends BaseController
                 despues: $registroDespues
             );
 
+
+            // ============================================================
+            // COMMIT
+            // ============================================================
+
             DB::commit();
 
             return response()->json([
@@ -338,7 +441,9 @@ class BoletaHonorarioController extends BaseController
             ]);
 
         } catch (\Exception $e) {
+
             DB::rollBack();
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error al actualizar la boleta de honorario.',

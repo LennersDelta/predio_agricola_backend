@@ -11,17 +11,60 @@ use Exception;
 
 class IngresosExtrasController extends BaseController
 {
+
     public function getListaIngresosExtras(Request $request)
     {
-        $query = DB::table('ingresos_extras as c')
-            ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
-            ->select(
-                'c.*',
-                'p.nombre as predio_nombre'
-            )
-            ->orderBy('c.orden', 'desc');
+        try {
 
-        return response()->json($query->get());
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('ingresos_extras as c')
+                ->leftJoin('predio as p', 'c.predio_id', '=', 'p.id')
+                ->select(
+                    'c.*',
+                    'p.nombre as predio_nombre'
+                );
+
+            // Administrador y Super Administrador
+            // pueden ver todos los registros
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuario normal: solo registros de su predio
+                $query->where(
+                    'c.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $ingresosExtras = $query
+                ->orderBy('c.orden', 'desc')
+                ->get();
+
+            return response()->json($ingresosExtras);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al cargar los ingresos extras.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function insert(Request $request)
