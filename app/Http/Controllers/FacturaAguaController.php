@@ -180,4 +180,151 @@ class FacturaAguaController extends BaseController
             ], 500);
         }
     }
+
+    public function show($uuid)
+    {
+        try {
+
+            $factura = DB::table('factura_agua as f')
+                ->leftJoin('predio as p', 'p.id', '=', 'f.predio_id')
+                ->leftJoin('estados as e', 'e.id', '=', 'f.estado_id')
+                ->where('f.uuid', $uuid)
+                ->select(
+                    'f.id',
+                    'f.predio_id',
+                    'p.nombre as predio_nombre',
+
+                    'f.n_factura',
+                    'f.mes_consumo',
+                    'f.valor',
+                    'f.proveedor',
+
+                    'f.uuid',
+                    'f.doe',
+                    'f.consumo',
+
+                    'f.estado_id',
+                    'e.nombre as estado_nombre',
+
+                    'f.user_id',
+                    'f.created_at',
+                    'f.updated_at'
+                )
+                ->first();
+
+            if (!$factura) {
+                return response()->json([
+                    'message' => 'Factura de agua no encontrada.'
+                ], 404);
+            }
+
+            return response()->json([
+                'data' => $factura
+            ], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'message' => 'Error al obtener la factura de agua.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function update(Request $request, $uuid)
+    {
+        $validator = Validator::make($request->all(), [
+            'predio_id'  => ['required', 'integer', 'exists:predio,id'],
+            'n_factura'  => ['required', 'string', 'max:50'],
+            'mes_consumo' => ['required', 'date'],
+            'valor'      => ['required', 'numeric'],
+            'proveedor'  => ['nullable', 'string', 'max:100'],
+            'doe'        => ['nullable', 'string', 'max:100'],
+            'consumo'    => ['nullable', 'string', 'max:10'],
+            'estado_id'  => ['required', 'integer', 'exists:estados,id'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first()
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            // Obtener registro anterior con nombre del predio y estado
+            $antes = DB::table('factura_agua as f')
+                ->leftJoin('predio as p', 'f.predio_id', '=', 'p.id')
+                ->leftJoin('estados as e', 'f.estado_id', '=', 'e.id')
+                ->select(
+                    'f.*',
+                    'p.nombre as predio_nombre',
+                    'e.nombre as estado_nombre'
+                )
+                ->where('f.uuid', $uuid)
+                ->first();
+
+            if (!$antes) {
+                return response()->json([
+                    'message' => 'Factura de agua no encontrada.'
+                ], 404);
+            }
+
+            // Actualizar factura
+            DB::table('factura_agua')
+                ->where('uuid', $uuid)
+                ->update([
+                    'predio_id'   => (int) $request->predio_id,
+                    'n_factura'   => $request->n_factura,
+                    'mes_consumo' => $request->mes_consumo,
+                    'valor'       => $request->valor,
+                    'proveedor'   => $request->proveedor,
+                    'doe'         => $request->doe,
+                    'consumo'     => $request->consumo,
+                    'estado_id'   => (int) $request->estado_id,
+                    'updated_at'  => now(),
+                ]);
+
+            // Recuperar registro actualizado
+            $despues = DB::table('factura_agua as f')
+                ->leftJoin('predio as p', 'f.predio_id', '=', 'p.id')
+                ->leftJoin('estados as e', 'f.estado_id', '=', 'e.id')
+                ->select(
+                    'f.*',
+                    'p.nombre as predio_nombre',
+                    'e.nombre as estado_nombre'
+                )
+                ->where('f.id', $antes->id)
+                ->first();
+
+            // Auditoría
+            $this->auditar(
+                modulo: 'Factura Agua',
+                accion: 'ACTUALIZAR',
+                tabla: 'factura_agua',
+                registroId: $antes->id,
+                descripcion: 'Se actualizó una factura de agua.',
+                antes: $antes,
+                despues: $despues
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Factura de agua actualizada correctamente.'
+            ], 200);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar la factura de agua.',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }    
 }

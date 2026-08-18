@@ -83,11 +83,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/factura/luz',         [FacturaLuzController::class, 'index']);
     Route::post('/factura/luz',        [FacturaLuzController::class, 'insert']);
     Route::delete('/factura/luz/{id}', [FacturaLuzController::class, 'destroy']);
+    Route::get('/factura/luz/{uuid}',  [FacturaLuzController::class, 'show']);
+    Route::put('/factura/luz/{uuid}',  [FacturaLuzController::class, 'update']);  
 
     // FACTURA AGUA
     Route::get('/factura/agua',         [FacturaAguaController::class, 'index']);
     Route::post('/factura/agua',        [FacturaAguaController::class, 'insert']);
     Route::delete('/factura/agua/{id}', [FacturaAguaController::class, 'destroy']);
+    Route::get('/factura/agua/{uuid}',  [FacturaAguaController::class, 'show']);
+    Route::put('/factura/agua/{uuid}',  [FacturaAguaController::class, 'update']);
 
     // PARQUE VEHICULAR //
     Route::get('listaParqueVehicular', [ParqueVehicularController::class, 'getListaParqueVehicular']); // LISTO TODO LOS PREDIO INCLUIDO LOS FILTROS NECESARIOS
