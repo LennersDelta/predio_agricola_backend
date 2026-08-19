@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 class CombustibleAsignacionController extends BaseController
 {
-    public function index(): JsonResponse
+    /*public function index(): JsonResponse
     {
         try {
 
@@ -42,7 +42,77 @@ class CombustibleAsignacionController extends BaseController
                 'error' => $e->getMessage()
             ], 500);
         }
-    }
+    }*/
+    public function index(): JsonResponse
+    {
+        try {
+
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('combustible_asignacion as ca')
+                ->join('predio as p', 'p.id', '=', 'ca.predio_id')
+                ->select(
+                    'ca.id',
+                    'ca.predio_id',
+                    'p.nombre as predio',
+                    DB::raw("TO_CHAR(ca.mes, 'YYYY-MM') as mes"),
+                    'ca.monto_asignado',
+                    'ca.monto_utilizado',
+                    'ca.saldo',
+                    'ca.created_at',
+                    'ca.updated_at'
+                );
+
+            // Administrador y Super Administrador
+            // pueden ver todos los registros
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                // Validar que el usuario tenga predio asociado
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Usuarios normales solo ven
+                // las asignaciones de su predio
+                $query->where(
+                    'ca.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $items = $query
+                ->orderBy('ca.mes', 'desc')
+                ->orderBy('p.nombre', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $items
+            ], 200);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener asignaciones de combustible',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }        
 
     public function store(Request $request): JsonResponse
     {
@@ -97,7 +167,7 @@ class CombustibleAsignacionController extends BaseController
             ], 500);
         }
     }
-    public function disponibles(): JsonResponse
+    /*public function disponibles(): JsonResponse
     {
         $items = DB::table('combustible_asignacion as ca')
             ->join(
@@ -122,7 +192,97 @@ class CombustibleAsignacionController extends BaseController
             ->get();
 
         return response()->json($items);
-    }
+    }*/
+
+    public function disponibles(): JsonResponse
+    {
+        try {
+
+            $usuarioActual = auth()->user();
+
+            if (!$usuarioActual) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            // ==========================================
+            // SOLO SUPERVISOR
+            // ==========================================
+
+            if (!$usuarioActual->hasRole('supervisor')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tiene permisos para acceder a las asignaciones de combustible.'
+                ], 403);
+            }
+
+            // ==========================================
+            // VALIDAR PREDIO
+            // ==========================================
+
+            if (!$usuarioActual->predio_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El usuario no tiene un predio asociado.'
+                ], 403);
+            }
+
+            // ==========================================
+            // ASIGNACIONES DEL PREDIO DEL SUPERVISOR
+            // ==========================================
+
+            $items = DB::table('combustible_asignacion as ca')
+                ->join(
+                    'predio as p',
+                    'p.id',
+                    '=',
+                    'ca.predio_id'
+                )
+                ->select(
+                    'ca.id',
+                    'ca.predio_id',
+
+                    DB::raw("
+                        CONCAT(
+                            p.nombre,
+                            ' | ',
+                            TRIM(TO_CHAR(ca.mes, 'TMMonth')),
+                            ' ',
+                            EXTRACT(YEAR FROM ca.mes)
+                        ) as nombre
+                    "),
+
+                    'ca.mes',
+                    'ca.saldo',
+                    'ca.monto_asignado',
+                    'ca.monto_utilizado'
+                )
+
+                // IMPORTANTE:
+                // solo asignaciones del predio del supervisor
+                ->where(
+                    'ca.predio_id',
+                    $usuarioActual->predio_id
+                )
+
+                // Solo asignaciones con saldo disponible
+                ->where('ca.saldo', '>=', 0)
+
+                ->orderBy('ca.mes', 'desc')
+                ->get();
+
+            return response()->json($items);
+
+        } catch (\Throwable $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }    
 
     public function detalle($id)
     {

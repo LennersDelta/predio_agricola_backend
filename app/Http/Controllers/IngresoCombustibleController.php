@@ -11,7 +11,18 @@ class IngresoCombustibleController extends BaseController
     public function index(): JsonResponse
     {
         try {
-            $data = DB::table('ingreso_combustible as ic')
+
+            $usuarioActual = auth()->user();
+
+            // Validar usuario autenticado
+            if (!$usuarioActual) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Usuario no autenticado.'
+                ], 401);
+            }
+
+            $query = DB::table('ingreso_combustible as ic')
                 ->join(
                     'combustible_asignacion as ca',
                     'ca.id',
@@ -26,9 +37,10 @@ class IngresoCombustibleController extends BaseController
                 )
                 ->select(
                     'ic.id',
+                    'ca.predio_id',
                     'p.nombre as predio',
                     'ic.numero_factura',
-                    'ca.mes',
+                     DB::raw("TO_CHAR(ca.mes, 'YYYY-MM') as mes"),                    
                     'ic.monto',
                     'ic.proveedor',
                     'ic.estado_factura',
@@ -36,15 +48,54 @@ class IngresoCombustibleController extends BaseController
                     'ic.litros',
                     'ic.comprobante',
                     'ic.created_at',
-                    'ic.patente',
-                )
+                    'ic.patente'
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | ADMINISTRADOR / SUPER ADMINISTRADOR
+            |--------------------------------------------------------------------------
+            |
+            | Ambos pueden visualizar los ingresos de todos los predios.
+            |
+            */
+
+            if (
+                !$usuarioActual->hasRole('administrador') &&
+                !$usuarioActual->hasRole('super_administrador')
+            ) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | USUARIO NORMAL
+                |--------------------------------------------------------------------------
+                */
+
+                if (!$usuarioActual->predio_id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'El usuario no tiene un predio asociado.'
+                    ], 403);
+                }
+
+                // Solo ingresos correspondientes al predio del usuario
+                $query->where(
+                    'ca.predio_id',
+                    $usuarioActual->predio_id
+                );
+            }
+
+            $data = $query
                 ->orderByDesc('ic.id')
                 ->get();
+
             return response()->json([
                 'success' => true,
                 'data' => $data
             ]);
+
         } catch (\Throwable $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
