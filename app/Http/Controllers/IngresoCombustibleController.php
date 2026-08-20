@@ -378,11 +378,8 @@ class IngresoCombustibleController extends BaseController
             return response()->json([
 
                 'success' => true,
-
                 'message' => 'Ingreso registrado correctamente.',
-
                 'archivo' =>  $nombreArchivo,
-
                 'data' => [
 
                     'id' =>              $id,
